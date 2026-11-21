@@ -9,7 +9,8 @@ Everything BrainPrint knows lives in **one file, [`brainprint.rl`](brainprint.rl
 (:Lens)-[:WEIGHTS {w, base_w}]->(:Network)                     3 lenses = weightings, not people
 (:Insight)-[:ABOUT]->(:Segment)      (:Insight)-[:SEEN_THROUGH]->(:Lens)
 (:Revision)-[:FROM]->(:Stimulus)     (:Revision)-[:TO]->(:Stimulus)     (:Revision)-[:FIXES]->(:Insight)
-(:Feedback)-[:CONFIRMS|CONTRADICTS]->(:Insight)                (written in P5)
+(:Feedback)-[:CONFIRMS|CONTRADICTS]->(:Insight)                your verdict on an insight
+(:Feedback)-[:UPDATED]->(:Lens)                                the calibration step it applied
 (:Segment)-[:SIMILAR_TO {score}]->(:Segment)                   vector neighbours in other pitches
 ```
 - **Segment** = one second of a pitch. `embedding` holds the 148 Destrieux-region values for that second, z-scored within the pitch and L2-normalised. It's indexed by `CREATE VECTOR INDEX segment_embedding`, so "moments that look alike in the brain" become a vector search.
@@ -41,7 +42,7 @@ This one file is shared by the CLI, the web app, and the agent.
 | `similar_moments` | Moments in **other** pitches that look alike in the brain (SIMILAR_TO / vector index), and whether they were flagged or fixed |
 | `revision_impact` | Before/after for a Revision: mean and minimum lens score, insight counts, claimed vs confirmed fixes |
 
-The file also holds 4 UI queries (`lenses`, `stimulus_meta`, `stimulus_seconds`, `graph_neighborhood`) that the web app uses for its panels.
+The file also holds 4 UI queries (`lenses`, `stimulus_meta`, `stimulus_seconds`, `graph_neighborhood`) that the web app uses for its panels, plus `feedback_log` and `revision_fixes` for the feedback loop.
 
 ## Concurrency (important)
 A writer needs exclusive access to a `.rl` file. While anything holds it writable, even read-only opens fail with `storage locked`, although several readers can share the file. The Python scripts open the store per run and close it again. The **web server holds one handle for as long as it runs**, because the Node client can't release one (see [docs/RELATE_NOTES.md §11–12](../docs/RELATE_NOTES.md)).

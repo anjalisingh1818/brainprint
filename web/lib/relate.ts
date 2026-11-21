@@ -79,6 +79,12 @@ export function runNamed(name: string, params: Record<string, string> = {}): Row
   return connection().query(q.cypher, { ...q.params, ...params }).rows as Row[];
 }
 
+/** Flush the WAL into the .rl snapshot so the committed file reflects the latest writes. */
+export function checkpoint() {
+  connection();
+  state.db?.checkpoint();
+}
+
 export function runCypher(cypher: string, params: Record<string, unknown> = {}) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return connection().query(cypher, params as any);

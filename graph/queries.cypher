@@ -43,8 +43,10 @@ WITH i, n.name AS network, avg(a.local_z) AS z
 ORDER BY abs(z) DESC
 WITH i, collect({network: network, z: round(z, 2)})[0..3] AS drivers
 OPTIONAL MATCH (f:Feedback)-[v:CONFIRMS|CONTRADICTS]->(i)
-RETURN i.id AS insight, i.kind AS kind, i.t_start AS t_start, i.t_end AS t_end, i.severity AS severity,
-       drivers, collect(type(v)) AS feedback, i.summary AS summary
+WITH i, drivers, f, v ORDER BY f.created_at
+RETURN i.id AS insight, i.kind AS kind, i.t_start AS t_start, i.t_end AS t_end, i.severity AS severity, drivers,
+       [x IN collect({id: f.id, verdict: type(v), comment: f.comment, lens: f.lens}) WHERE x.id IS NOT NULL] AS feedback,
+       i.summary AS summary
 ORDER BY severity DESC;
 
 // name: similar_moments
@@ -102,13 +104,14 @@ RETURN st.id AS stimulus, st.title AS title, st.source AS source, st.warning AS 
        st.region_names AS region_names, collect(DISTINCT {revision: rv.id, role: type(e)}) AS revisions;
 
 // name: stimulus_seconds
-// description: Every second of a pitch: words, lens score, per-network strength/local_z, region z-scores.
+// description: Every second of a pitch: words, lens score (calibrated w and base_w), per-network strength/local_z, region z-scores.
 // params: stimulus=pitch_jargon, lens=engagement
 MATCH (:Stimulus {id: $stimulus})-[:HAS_SEGMENT]->(g:Segment)-[a:ACTIVATES]->(n:Network)
 OPTIONAL MATCH (n)<-[w:WEIGHTS]-(:Lens {id: $lens})
 WITH g, collect({network: n.name, strength: a.strength, local_z: a.local_z}) AS acts,
-     sum(coalesce(w.w, 0.0) * a.strength) AS score
-RETURN g.id AS segment, g.t AS t, g.text AS text, round(score, 3) AS score, acts, g.regions_z AS regions_z
+     sum(coalesce(w.w, 0.0) * a.strength) AS score, sum(coalesce(w.base_w, 0.0) * a.strength) AS base_score
+RETURN g.id AS segment, g.t AS t, g.text AS text, round(score, 3) AS score, round(base_score, 3) AS base_score,
+       acts, g.regions_z AS regions_z
 ORDER BY t;
 
 // name: graph_neighborhood
@@ -138,8 +141,31 @@ UNION ALL
 MATCH (f:Feedback)-[r:CONFIRMS|CONTRADICTS]->(i:Insight {stimulus_id: $stimulus})
 RETURN f.id AS a, 'Feedback' AS a_label, f.verdict AS a_name, type(r) AS rel, i.id AS b, 'Insight' AS b_label, i.kind AS b_name, null AS w
 UNION ALL
+MATCH (f:Feedback)-[r:UPDATED]->(l:Lens) WHERE EXISTS { MATCH (f)-[:CONFIRMS|CONTRADICTS]->(:Insight {stimulus_id: $stimulus}) }
+RETURN f.id AS a, 'Feedback' AS a_label, f.verdict AS a_name, type(r) AS rel, l.id AS b, 'Lens' AS b_label, l.name AS b_name, null AS w
+UNION ALL
 MATCH (:Insight {stimulus_id: $stimulus})-[:ABOUT]->(g:Segment)-[r:SIMILAR_TO]->(h:Segment)
 WITH g, r, h ORDER BY r.score DESC
 WITH g, collect({h: h, s: r.score})[0] AS top
 RETURN g.id AS a, 'Segment' AS a_label, 't=' + toString(g.t) AS a_name, 'SIMILAR_TO' AS rel,
        top.h.id AS b, 'Segment' AS b_label, top.h.stimulus_id + ' t=' + toString(top.h.t) AS b_name, round(top.s, 3) AS w;
+
+// ---- feedback & calibration (P5) ----
+
+// name: feedback_log
+// description: All founder feedback, newest first: verdict, comment, the insight it judges, and the lens weight changes it caused.
+// params:
+MATCH (f:Feedback)-[v:CONFIRMS|CONTRADICTS]->(i:Insight)
+OPTIONAL MATCH (f)-[:UPDATED]->(l:Lens)
+RETURN f.id AS feedback, type(v) AS verdict, f.comment AS comment, f.created_at AS created_at, i.id AS insight,
+       i.stimulus_id AS stimulus, l.id AS lens, f.networks AS networks, f.w_before AS w_before, f.w_after AS w_after
+ORDER BY created_at DESC;
+
+// name: revision_fixes
+// description: For a Revision: each insight it claims to FIX, and whether founder feedback confirmed or contradicted it.
+// params: revision=rev_ledgerly_v2
+MATCH (rv:Revision {id: $revision})-[:FIXES]->(i:Insight)
+OPTIONAL MATCH (f:Feedback)-[v:CONFIRMS|CONTRADICTS]->(i)
+RETURN i.id AS insight, i.kind AS kind, i.t_start AS t_start, i.t_end AS t_end, round(i.severity, 2) AS severity,
+       [x IN collect(type(v)) WHERE x IS NOT NULL] AS feedback
+ORDER BY t_start;

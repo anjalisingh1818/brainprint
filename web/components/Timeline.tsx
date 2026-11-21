@@ -22,11 +22,18 @@ export default function Timeline({ seconds, insights, mode, lensName, t, onT, se
   const tMax = Math.max(1, (seconds.at(-1)?.t ?? 1));
 
   const series = useMemo(() => {
-    if (mode === "lens") return [{ key: "lens", color: "var(--accent)", values: seconds.map((s) => s.score) }];
+    if (mode === "lens") {
+      const out = [{ key: "lens", color: "var(--accent)", values: seconds.map((s) => s.score), dashed: false }];
+      // after feedback has recalibrated the lens, also show the score under the hand-set base weights
+      if (seconds.some((s) => Math.abs(s.base_score - s.score) > 1e-3))
+        out.unshift({ key: "base", color: "var(--muted)", values: seconds.map((s) => s.base_score), dashed: true });
+      return out;
+    }
     return NETWORKS.map((n) => ({
       key: n,
       color: `var(--net-${n})`,
       values: seconds.map((s) => s.acts.find((a) => a.network === n)?.strength ?? 0),
+      dashed: false,
     }));
   }, [seconds, mode]);
 
@@ -87,7 +94,8 @@ export default function Timeline({ seconds, insights, mode, lensName, t, onT, se
           <text key={tt} x={x(tt)} y={H - 6} fontSize="10" textAnchor="middle" fill="var(--muted)">{tt}s</text>
         ))}
         {series.map((s) => (
-          <path key={s.key} d={path(s.values)} fill="none" stroke={s.color} strokeWidth={mode === "lens" ? 2.2 : 1.5} strokeLinejoin="round" />
+          <path key={s.key} d={path(s.values)} fill="none" stroke={s.color} strokeWidth={mode === "lens" && !s.dashed ? 2.2 : 1.5}
+            strokeDasharray={s.dashed ? "4 4" : undefined} strokeLinejoin="round" />
         ))}
         <line x1={x(t)} x2={x(t)} y1={PAD.t} y2={H - PAD.b} stroke="var(--ink)" strokeWidth="1" opacity="0.6" />
       </svg>
@@ -105,6 +113,7 @@ export default function Timeline({ seconds, insights, mode, lensName, t, onT, se
       ) : (
         <div className="legend">
           <span style={{ ["--c" as string]: "var(--accent)" }}>{lensName} score (z vs. all pitches)</span>
+          {series.some((s) => s.dashed) && <span style={{ ["--c" as string]: "var(--muted)" }}>before calibration (base weights)</span>}
           {Object.entries(INSIGHT_LABEL).map(([k, v]) => (
             <span key={k} style={{ ["--c" as string]: `var(--kind-${k})` }}>{v}</span>
           ))}

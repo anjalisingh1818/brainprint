@@ -33,8 +33,8 @@ const signed = (x: number) => `${x > 0 ? "+" : ""}${r2(x)}`;
 
 type Bundle = {
   pitch: { id: string; title: string; source: string; project: string | null; script: string | null };
-  lens: { id: string; weights: { network: string; w: number }[] };
-  insights: { id: string; kind: string; t: string; severity: number; drivers: string[] }[];
+  lens: { id: string; weights: { network: string; w: number; base_w: number }[] };
+  insights: { id: string; kind: string; t: string; severity: number; drivers: string[]; feedback: { verdict: string; comment: string | null }[] }[];
   focus: null | {
     insight: string; kind: string; t_start: number; t_end: number; severity: number;
     weakest_second: { segment: string; t: number; text: string; lens_score: number } | null;
@@ -85,10 +85,11 @@ export function buildBundle(ctx: AgentContext, rec: Recorder): Bundle {
 
   return {
     pitch: { id: stimulus, title: String(meta.title ?? stimulus), source: String(meta.source ?? "?"), project: (meta.project as string) ?? null, script: (meta.script as string) ?? null },
-    lens: { id: lens, weights: ((lensRow?.weights as { network: string; w: number }[]) ?? []).map((w) => ({ network: w.network, w: r2(w.w) })) },
+    lens: { id: lens, weights: ((lensRow?.weights as { network: string; w: number; base_w: number }[]) ?? []).map((w) => ({ network: w.network, w: r2(w.w), base_w: r2(w.base_w) })) },
     insights: ins.map((i) => ({
       id: String(i.insight), kind: String(i.kind), t: `${i.t_start}-${i.t_end}s`, severity: r2(i.severity),
       drivers: (i.drivers as { network: string; z: number }[]).map((d) => `${d.network} ${signed(d.z)}`),
+      feedback: ((i.feedback as { verdict: string; comment: string | null }[]) ?? []).map((f) => ({ verdict: f.verdict, comment: f.comment })),
     })),
     focus,
     revisions: revs,
@@ -99,11 +100,14 @@ export function buildBundle(ctx: AgentContext, rec: Recorder): Bundle {
 function evidenceFacts(b: Bundle): string {
   const L: string[] = [];
   const lensW = b.lens.weights.map((w) => `${signed(w.w)}*${w.network}`).join(" ");
+  const drift = b.lens.weights.filter((w) => Math.abs(w.w - w.base_w) >= 0.005);
   L.push(`P1 [[Stimulus:${b.pitch.id}]] pitch "${b.pitch.title}" (project ${b.pitch.project ?? "?"}), data source: ${b.pitch.source}.`);
   if (b.pitch.script) L.push(`SCRIPT: """${b.pitch.script.replace(/\s+/g, " ").trim().slice(0, 1500)}"""`);
-  L.push(`L1 [[Lens:${b.lens.id}]] lens score = ${lensW} (weights over network z-scores; not a person).`);
+  L.push(`L1 [[Lens:${b.lens.id}]] lens score = ${lensW} (weights over network z-scores; not a person).` +
+    (drift.length ? ` Calibrated by founder feedback from base: ${drift.map((w) => `${w.network} ${signed(w.base_w)}->${signed(w.w)}`).join(", ")}.` : " Not calibrated yet (base weights)."));
   b.insights.forEach((i, k) =>
-    L.push(`I${k + 1} [[Insight:${i.id}]] ${KIND_LABEL[i.kind] ?? i.kind}, t=${i.t}, severity ${i.severity}; drivers (z within pitch): ${i.drivers.join(", ")}.`));
+    L.push(`I${k + 1} [[Insight:${i.id}]] ${KIND_LABEL[i.kind] ?? i.kind}, t=${i.t}, severity ${i.severity}; drivers (z within pitch): ${i.drivers.join(", ")}.` +
+      (i.feedback.length ? ` FOUNDER FEEDBACK: ${i.feedback.map((f) => `${f.verdict}${f.comment ? ` ("${f.comment}")` : ""}`).join("; ")}.` : " No founder feedback yet.")));
   const f = b.focus;
   if (f) {
     L.push(`FOCUS = [[Insight:${f.insight}]] (t=${f.t_start}-${f.t_end}s).`);
@@ -153,7 +157,9 @@ Hard rules:
    "flagged as", "fixed by"), or what the revision changed and its measured before/after. Do not add claims the facts do not state.
 6. If asked for a fix: quote the original line and give ONE concrete rewrite in plain words. Use only facts already in the
    SCRIPT (names, numbers, claims). Never invent statistics, customers or results; write a placeholder like [X hours] instead.
-7. Format: at most 150 words, 3-5 "- " bullets plus one rewrite line. No headings, no tables, no horizontal rules.`;
+7. Founder feedback outranks rule insights: if an insight is CONTRADICTED, say the founder judged it not an issue and do not
+   recommend fixing it; if CONFIRMED, treat it as the priority and mention the founder's note.
+8. Format: at most 150 words, 3-5 "- " bullets plus one rewrite line. No headings, no tables, no horizontal rules.`;
 
 type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
 
@@ -193,6 +199,8 @@ function templateAnswer(b: Bundle): string {
   out.push(`**${KIND_LABEL[f.kind] ?? f.kind}** at t=${f.t_start}-${f.t_end}s [[Insight:${f.insight}]] (severity ${f.severity}).`);
   if (f.weakest_second)
     out.push(`- Lowest ${b.lens.id} score (${signed(f.weakest_second.lens_score)}) at t=${f.weakest_second.t}s while the script says "${f.weakest_second.text}" [[Segment:${f.weakest_second.segment}]].`);
+  if (ins?.feedback.length)
+    out.push(`- Your feedback: ${ins.feedback.map((f) => `${f.verdict.toLowerCase()}${f.comment ? ` ("${f.comment}")` : ""}`).join("; ")}.`);
   if (ins?.drivers.length)
     out.push(`- Driving networks (z within the pitch): ${ins.drivers.map((d) => { const [n, z] = d.split(" "); return `${NET_LABEL[n] ?? n} ${z} [[Network:${n}]]`; }).join(", ")}.`);
   const words = f.context.map((c) => c.text).filter(Boolean).join(" ");

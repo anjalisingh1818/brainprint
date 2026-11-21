@@ -76,6 +76,17 @@ Graph-first exists because of Groq's free-plan limit of 8K tokens per minute: an
 
 > Privacy: with Groq, the pitch script and the graph facts for the moment in focus are sent to Groq's API. Use Ollama or graph-only mode for private pitches.
 
+## Feedback loop: it learns from you, without retraining anything
+Select an insight and mark it **✓ Real issue** or **✗ Not an issue**, with an optional note:
+
+1. **Graph write:** a `(:Feedback)-[:CONFIRMS|CONTRADICTS]->(:Insight)` edge plus `(:Feedback)-[:UPDATED]->(:Lens)`, written in one Relate transaction and checkpointed into `graph/brainprint.rl` ([`web/lib/feedback.ts`](web/lib/feedback.ts)).
+2. **Light calibration:** only the current lens's `WEIGHTS.w` change. "Real issue" gives `w_n -= 0.1·tanh(m_n)`; "not an issue" gives `w_n += 0.1·tanh(m_n)`, where `m_n` is the network's mean strength over the insight's seconds. So the lens learns to score moments like this lower (or higher). Each weight stays within ±0.5 of its hand-set `base_w`. TRIBE and its predictions are never changed or retrained.
+3. **Visible effect:** the timeline adds a dashed "before calibration" line, the Calibration panel shows each weight's base, current value, and drift, and a learning log lists every Feedback node with **undo** (which reverts exactly its delta) and **reset to base**.
+4. **The agent uses it:** founder feedback outranks rule insights. A contradicted insight is reported as "judged not an issue, no fix needed"; a confirmed one becomes the priority, quoting your note.
+5. **Before/after:** the Before/after panel overlays the lens score of a Revision's original and revised pitch, with mean, worst second, and insight counts from `revision_impact`. It also shows which of the revision's claimed `FIXES` your feedback has confirmed.
+
+Feedback and calibrated weights survive `python graph/ingest.py`: insight ids are stable, and ingest only sets `w` when it creates the edge.
+
 ## Using the graph from any MCP host
 Relate ships an MCP server in its CLI. With the [Relate CLI installed](https://relatedb.ai), the committed [`.mcp.json`](.mcp.json) lets Claude Code (and any other MCP host) query the same single-file graph read-only through Relate's `get_schema` / `read_cypher` tools:
 ```json

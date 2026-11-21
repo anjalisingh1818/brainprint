@@ -31,6 +31,10 @@ The brain heatmap draws the real fsaverage5 inflated surface that TRIBE predicts
 - **Scrub the timeline** by dragging. The words for that second and the brain map follow. Coloured bands are insights; click one to select it.
 - **Graph explorer:** hover a node or edge to see it in Cypher notation. Click an insight to select it, or click a segment to jump there. Dashed `SIMILAR_TO` edges lead to similar moments in *other* pitches, and clicking one switches pitch.
 
+## Feedback, calibration, before/after
+- **Select an insight**, then use **✓ Real issue** / **✗ Not an issue** with an optional note. This calls `POST /api/feedback`, which writes the Feedback node and nudges the current lens's weights. `DELETE /api/feedback?id=` undoes one feedback exactly, and `POST {action: "reset", lens}` resets a lens to its base weights.
+- **Calibration panel:** base vs current weights and the learning log. **Before/after panel:** a Revision's original vs revised pitch under the current lens.
+
 ## Agent panel
 `POST /api/agent` picks the model from `web/.env.local` (see `.env.example`): Groq (free) or Ollama for the **graph-first** explainer, Claude for the multi-step **tool agent**, or none for **graph-only** mode, which is also a checkbox in the panel. Details and guardrails are in the main README under "The agent".
 

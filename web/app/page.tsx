@@ -4,9 +4,13 @@ import Timeline from "@/components/Timeline";
 import BrainMap from "@/components/BrainMap";
 import GraphView from "@/components/GraphView";
 import AgentChat from "@/components/AgentChat";
+import InsightCard from "@/components/InsightCard";
+import Compare from "@/components/Compare";
+import LearningLog from "@/components/LearningLog";
 import {
-  INSIGHT_LABEL, NETWORK_LABEL, q,
-  type InsightRow, type LensRow, type OverviewRow, type SecondRow, type StimulusMeta, type Triple,
+  NETWORK_LABEL, q, send,
+  type FeedbackLogRow, type FeedbackResult, type InsightRow, type LensRow, type OverviewRow, type SecondRow,
+  type StimulusMeta, type Triple,
 } from "@/lib/types";
 
 export default function Home() {
@@ -22,12 +26,17 @@ export default function Home() {
   const [t, setT] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // bumped after every graph write (feedback, undo, reset) so all panels re-query Relate
+  const [version, setVersion] = useState(0);
+  const [log, setLog] = useState<FeedbackLogRow[]>([]);
+  const [lastFb, setLastFb] = useState<FeedbackResult | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    Promise.all([q<OverviewRow>("overview"), q<LensRow>("lenses")])
-      .then(([o, l]) => { setOverview(o); setLenses(l); })
+    Promise.all([q<OverviewRow>("overview"), q<LensRow>("lenses"), q<FeedbackLogRow>("feedback_log")])
+      .then(([o, l, f]) => { setOverview(o); setLenses(l); setLog(f); })
       .catch((e) => setError(String(e.message ?? e)));
-  }, []);
+  }, [version]);
 
   useEffect(() => {
     let live = true;
@@ -42,7 +51,7 @@ export default function Home() {
       })
       .catch((e) => setError(String(e.message ?? e)));
     return () => { live = false; };
-  }, [stimulus]);
+  }, [stimulus, version]);
 
   useEffect(() => {
     let live = true;
@@ -50,7 +59,18 @@ export default function Home() {
       .then((s) => live && setSeconds(s))
       .catch((e) => setError(String(e.message ?? e)));
     return () => { live = false; };
-  }, [stimulus, lens]);
+  }, [stimulus, lens, version]);
+
+  const write = useCallback(async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    try { await fn(); setVersion((v) => v + 1); setError(null); }
+    catch (e) { setError(String((e as Error).message ?? e)); }
+    finally { setBusy(false); }
+  }, []);
+  const giveFeedback = (insight: string, verdict: "confirm" | "contradict", comment: string) =>
+    write(async () => setLastFb(await send<FeedbackResult>("POST", "/api/feedback", { insight, verdict, comment: comment || undefined, lens })));
+  const undoFeedback = (id: string) => write(async () => { await send("DELETE", `/api/feedback?id=${encodeURIComponent(id)}`); setLastFb(null); });
+  const resetLens = () => write(async () => { await send("POST", "/api/feedback", { action: "reset", lens }); setLastFb(null); });
 
   const pickInsight = useCallback((id: string) => {
     setSelected(id);
@@ -82,6 +102,8 @@ export default function Home() {
   const lensRow = lenses.find((l) => l.lens === lens);
   const current = seconds.find((s) => s.t === t);
   const placeholder = meta?.source === "synthetic-placeholder";
+  const revision = meta?.revisions.find((r) => r.revision)?.revision ?? "rev_ledgerly_v2";
+  const calibrated = lensRow?.weights.some((w) => Math.abs(w.w - w.base_w) > 1e-6);
 
   return (
     <main className="wrap">
@@ -124,6 +146,7 @@ export default function Home() {
         </div>
         {lensRow && (
           <span className="hint">
+            {calibrated && <b title="weights changed by your feedback">calibrated · </b>}
             {lensRow.name} = {lensRow.weights.map((w) => `${w.w > 0 ? "+" : "−"}${Math.abs(w.w).toFixed(2)}·${NETWORK_LABEL[w.network]}`).join(" ")}
           </span>
         )}
@@ -146,33 +169,35 @@ export default function Home() {
           <GraphView triples={triples} onSegment={pickSegment} onInsight={pickInsight} />
         </section>
         <section className="card">
-          <h2>Insights <span className="r">rule-based, from graph queries</span></h2>
+          <h2>Insights <span className="r">select one to give feedback</span></h2>
           <div className="insights">
             {insights.length === 0 && <p className="empty">No insights for this pitch.</p>}
             {insights.map((i) => (
-              <button key={i.insight} className="insight" aria-pressed={selected === i.insight}
-                style={{ ["--k" as string]: `var(--kind-${i.kind})` }} onClick={() => pickInsight(i.insight)}>
-                <div className="h">
-                  <span>{INSIGHT_LABEL[i.kind] ?? i.kind}</span>
-                  <small>t={i.t_start}–{i.t_end}s · severity {i.severity.toFixed(2)}</small>
-                </div>
-                <p>{i.summary}</p>
-                <div className="chips">
-                  {i.drivers.map((d) => (
-                    <span key={d.network} className="chip">{NETWORK_LABEL[d.network]} {d.z > 0 ? "+" : ""}{d.z.toFixed(2)}</span>
-                  ))}
-                  {i.feedback.map((f, k) => <span key={k} className="chip">{f.toLowerCase()}</span>)}
-                  <span className="chip"><code>{i.insight}</code></span>
-                </div>
-              </button>
+              <InsightCard key={i.insight} ins={i} selected={selected === i.insight} lensName={lensRow?.name ?? lens} busy={busy}
+                onSelect={() => pickInsight(i.insight)}
+                onFeedback={(verdict, comment) => giveFeedback(i.insight, verdict, comment)}
+                onUndo={undoFeedback} />
             ))}
           </div>
         </section>
 
       </div>
 
+      <div className="grid" style={{ marginTop: 14 }}>
+        <section className="card">
+          <h2>Before / after <span className="r">Revision <code>{revision}</code> · {lensRow?.name ?? lens} lens</span></h2>
+          <Compare revision={revision} lens={lens} lensName={lensRow?.name ?? lens} version={version}
+            onPick={(sid, tt) => { setStimulus(sid); setT(tt); }} />
+        </section>
+        <section className="card">
+          <h2>Calibration <span className="r">learns from your feedback</span></h2>
+          <LearningLog lens={lensRow} log={log} last={lastFb} busy={busy} onUndo={undoFeedback} onReset={resetLens}
+            onPick={(id) => onCite("Insight", id)} />
+        </section>
+      </div>
+
       <section className="card" style={{ marginTop: 14 }}>
-        <h2>Ask the graph <span className="r">Claude + Relate tools · answers cite graph nodes</span></h2>
+        <h2>Ask the graph <span className="r">graph-grounded answers · citations verified</span></h2>
         <AgentChat context={{ stimulus, insight: selected, t, lens }} onCite={onCite} />
       </section>
 

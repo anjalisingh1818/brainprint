@@ -10,7 +10,8 @@
 // (:Insight {id, kind, summary, t_start, t_end, severity, created_by})-[:ABOUT]->(:Segment)
 // (:Insight)-[:SEEN_THROUGH]->(:Lens)
 // (:Revision {id, note})-[:FROM]->(:Stimulus), -[:TO]->(:Stimulus), -[:FIXES]->(:Insight)
-// (:Feedback {id, verdict, comment, created_at})-[:CONFIRMS|CONTRADICTS]->(:Insight)
+// (:Feedback {id, verdict, comment, lens, created_at, networks[], w_before[], w_after[]})-[:CONFIRMS|CONTRADICTS]->(:Insight)
+// (:Feedback)-[:UPDATED]->(:Lens)                      the calibration step this feedback applied (written by the web app)
 // (:Segment)-[:SIMILAR_TO {score}]->(:Segment)         top-k vector neighbours in OTHER stimuli
 
 CREATE CONSTRAINT project_id IF NOT EXISTS FOR (n:Project) REQUIRE n.id IS UNIQUE;
