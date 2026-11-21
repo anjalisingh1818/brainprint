@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.6.0",
+    "@huggingface/transformers": "4.3.2",
     "@relate/relate": "1.2.0",
     "d3-force": "3.0.1",
     "next": "15.5.29",

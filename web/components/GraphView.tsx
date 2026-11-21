@@ -12,8 +12,9 @@ type L = SimulationLinkDatum<N> & { rel: string; w: number | null };
 const COLOR: Record<string, string> = {
   Project: "#5b5bd6", Stimulus: "#3b7dd8", Segment: "#9aa0a6", Insight: "#d98a00",
   Lens: "#149c8c", Network: "#9b51e0", Revision: "#3a9d4a", Feedback: "#d64545",
+  Brain: "#5b5bd6", Claim: "#d98a00", Concept: "#149c8c", Idea: "#3b7dd8",
 };
-const R: Record<string, number> = { Project: 11, Stimulus: 10, Insight: 9, Lens: 8, Network: 7, Revision: 9, Feedback: 7, Segment: 4 };
+const R: Record<string, number> = { Project: 11, Stimulus: 10, Insight: 9, Lens: 8, Network: 7, Revision: 9, Feedback: 7, Segment: 4, Brain: 12, Claim: 5, Concept: 7, Idea: 10 };
 const W = 760, H = 520;
 
 type Props = { triples: Triple[]; onSegment: (id: string) => void; onInsight: (id: string) => void };
@@ -61,7 +62,7 @@ export default function GraphView({ triples, onSegment, onInsight }: Props) {
           return (
             <line key={i} className={`edge${l.rel === "SIMILAR_TO" ? " sim" : ""}`}
               x1={clamp(s.x, 8, W - 8)} y1={clamp(s.y, 8, H - 8)} x2={clamp(t.x, 8, W - 8)} y2={clamp(t.y, 8, H - 8)}
-              onMouseEnter={() => setInfo(`(${s.label} ${s.name})-[:${l.rel}${l.w != null ? ` {${l.rel === "WEIGHTS" ? "w" : "score"}: ${l.w}}` : ""}]->(${t.label} ${t.name})`)} />
+              onMouseEnter={() => setInfo(`(${s.label} ${s.name})-[:${l.rel}${l.w != null ? ` {${l.rel === "WEIGHTS" ? "w" : l.rel === "STANCE" ? "value" : "score"}: ${l.w}}` : ""}]->(${t.label} ${t.name})`)} />
           );
         })}
         {nodes.map((n) => (
@@ -70,7 +71,7 @@ export default function GraphView({ triples, onSegment, onInsight }: Props) {
             onMouseEnter={() => setInfo(`(:${n.label} {id: "${n.id}"})  ${n.name}`)}
             onClick={() => (n.label === "Segment" ? onSegment(n.id) : n.label === "Insight" ? onInsight(n.id) : null)}>
             <circle r={R[n.label] ?? 5} fill={COLOR[n.label] ?? "#888"} stroke="var(--panel)" strokeWidth="1.5" />
-            {n.label !== "Segment" && <text x={(R[n.label] ?? 5) + 3} y={3}>{n.name}</text>}
+            {n.label !== "Segment" && n.label !== "Claim" && <text x={(R[n.label] ?? 5) + 3} y={3}>{n.name}</text>}
           </g>
         ))}
       </svg>

@@ -117,10 +117,21 @@ def rule_insights(doc: dict, z: list[dict], lz: list[dict]) -> list[dict]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--reset", action="store_true", help="delete graph/brainprint.rl first")
+    ap.add_argument("--force", action="store_true", help="with --reset: also delete trained brains and feedback")
     ap.add_argument("--store", default=str(STORE))
     args = ap.parse_args()
     store = Path(args.store)
     if args.reset and store.exists():
+        # Brains, ideas and feedback are created in the web app and live only in this file: don't destroy them silently.
+        with relate.connect(str(store), read_only=True) as ro:
+            n = lambda cy: ro.execute(cy).single().n
+            mine = n("MATCH (b:Brain) WHERE NOT coalesce(b.example, false) RETURN count(b) AS n")
+            fb = n("MATCH (f:Feedback) RETURN count(f) AS n")
+            ideas = n("MATCH (i:Idea) RETURN count(i) AS n")
+            answers = n("MATCH (k:Check) WHERE k.pending = false RETURN count(k) AS n")
+        if (mine or fb or ideas or answers) and not args.force:
+            sys.exit(f"--reset would delete {mine} trained brain(s), {ideas} idea(s), {answers} answered self-check(s) and "
+                     f"{fb} feedback node(s) created in the web app. Re-run with --reset --force to confirm.")
         store.unlink()
         print(f"reset: deleted {store.name}")
 

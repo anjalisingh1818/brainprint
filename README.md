@@ -1,12 +1,15 @@
 # BrainPrint 🧠
 
-**See where your pitch loses people before you show it to anyone.**
+**Test a pitch on two kinds of "brain" before you show it to anyone.**
 
-You upload a short product pitch (a video or a script). Meta's **TRIBE v2** brain-encoding model predicts, second by second, which brain networks the pitch is likely to activate. BrainPrint stores those predictions in a **Relate** graph, one `.rl` file committed to this repo. An agent then queries the graph to find where the *predicted attention/processing signals* drop, suggests edits, and learns from your feedback.
+1. **Pitch timeline:** Meta's **TRIBE v2** brain-encoding model predicts, second by second, how an *average* brain's networks respond to your pitch (script or video). BrainPrint shows where the *predicted attention/processing signals* drop, explains why, and suggests edits.
+2. **Brain Library + Idea Lab:** you **train "brains"**, models of particular mindsets (a cautious investor, a busy freelancer, your own), by answering questions. Each brain commits to a prediction before every question, so its accuracy is measured honestly. Paste an idea, and BrainPrint splits it into points and predicts which points **land** with which brain and which **put it off**, with the reasons and recommended edits.
+
+Everything (predictions, insights, brains, answers, ideas, feedback) lives in one **Relate** knowledge graph: a single `.rl` file committed to this repo. Every answer cites the graph nodes it used, and those citations are verified.
 
 > Built for the **Relate by Neo4j Hackathon**, theme *"Context, connected"*.
 
-> ⚠️ **What this is not:** TRIBE predicts average brain *activity*. It does not predict opinions, emotions, or buying intent. "Lenses" are weightings over brain networks, not real people or audience segments. See [Limitations](#limitations).
+> ⚠️ **What this is not:** TRIBE predicts average brain *activity*. It does not predict opinions, emotions, or buying intent. "Lenses" are weightings over brain networks, not people. A trained brain is a model of **the answers its trainer gave**, shown with its measured accuracy. It is not a real person, a customer survey, or a market forecast. See [Limitations](#limitations).
 
 ---
 
@@ -24,6 +27,8 @@ pitch (video/script) ──► /tribe  TRIBE v2 → per-second activation, 7 net
                                ▼
                          /web    Next.js: timeline · brain heatmap · graph explorer
                                  · agent chat (cites graph nodes) · before/after
+                                 · Brain Library (train mindset brains) · Idea Lab
+                                   (idea → claims → concepts → per-brain predictions)
 ```
 
 ## Repo layout
@@ -87,13 +92,49 @@ Select an insight and mark it **✓ Real issue** or **✗ Not an issue**, with a
 
 Feedback and calibrated weights survive `python graph/ingest.py`: insight ids are stable, and ingest only sets `w` when it creates the edge.
 
+## Brain Library and Idea Lab: brains you train
+**Brain Library** (`/brains`):
+- **Create a brain:** give it a name and a one-line description. Two **example brains** with scripted answers ship with the app.
+- **Train it:** the app picks the statement the brain has the least evidence about, from a 36-statement probe bank and your ideas' points.
+- **Held-out self-test:** the brain **commits to a prediction first**, stored as a pending `(:Check)`. Then you answer agree, neutral, or disagree (for idea points: lands, neutral, puts me off), with an optional note.
+- **Feedback:** the reveal shows whether the brain was right and which of your earlier answers it relied on. Every check counts towards the brain's self-test accuracy. "Run cross-validation" (4-fold) compares its accuracy with the always-say-the-most-common-answer baseline.
+
+**Idea Lab** (`/ideas`):
+- **Split the idea:** paste an idea or pitch. Groq splits it into 4–10 claims and links each to concepts. An offline sentence splitter is used when no LLM is configured.
+- **Predict:** every brain predicts whether each point lands or puts it off. One call per brain, cached as `PREDICTS` edges until the brain learns something new.
+- **Explain:** click a cell to see why (the brain's most similar answers from the vector index, plus shared concepts). If a prediction is wrong, teach the brain right there.
+- **Advise:** "Get advice" writes graph-grounded recommendations with **verified citations**.
+- **Link to TRIBE:** an idea can be linked to its TRIBE-analysed pitch (`PITCHED_AS`).
+
+**How a brain predicts (GraphRAG over a knowledge graph):** predicting a brain's stance on a claim is *link prediction* `(:Brain)-[:STANCE]->(:Claim)`.
+1. The graph retrieves the evidence: the brain's most similar answered claims (Relate `VECTOR INDEX claim_embedding` over local MiniLM sentence embeddings) and concept paths `(target)-[:MENTIONS]->(:Concept)<-[:MENTIONS]-(answered)<-[:STANCE]-(brain)`.
+2. A free LLM (Groq) reads that evidence and predicts, citing the answers it used.
+3. Without an LLM, a graph-only predictor is used.
+
+**Measured accuracy** (4-fold cross-validation with random folds, 22 scripted answers per example brain; baseline = always predict the brain's most common answer):
+
+| predictor | Cautious investor | Busy freelancer |
+|---|---|---|
+| majority baseline | 59% | 64% |
+| embedding similarity only (first attempt, dropped) | 32% | 36% |
+| graph-only (similarity + concepts + base rate) | ≈ baseline | ≈ baseline |
+| GraphRAG + Groq, **with** per-target "similar answer → stance" hints | 50–68% | 41–50% |
+| **GraphRAG + Groq gpt-oss-120b (final)**: the graph picks and orders the evidence, with no stance hints | **64–82%** over 4 runs (mean ≈ 72%) | **64–68%** over 3 runs (mean ≈ 65%) |
+
+What we learned, measured rather than assumed:
+- Semantic similarity alone predicts stance *worse than guessing*, because "AI makes me interested" and "AI is hype" sound alike but carry opposite stances.
+- Feeding those similarity hints to the LLM dragged it down too.
+- The final design beats the baseline for the investor brain (≈ 72% vs 59%) and only ties it for the freelancer brain (≈ 65% vs 64%).
+
+With 22 answers the numbers are noisy, which is why every brain shows its own measured accuracy. Treat predictions from a brain that doesn't beat its baseline as weak.
+
 ## Using the graph from any MCP host
-Relate ships an MCP server in its CLI. With the [Relate CLI installed](https://relatedb.ai), the committed [`.mcp.json`](.mcp.json) lets Claude Code (and any other MCP host) query the same single-file graph read-only through Relate's `get_schema` / `read_cypher` tools:
+Relate ships an MCP server in its CLI. With the [Relate CLI installed](https://relatedb.ai), copy [`docs/mcp.example.json`](docs/mcp.example.json) to `.mcp.json` (Claude Code) or into your MCP host's config. The host can then query the same single-file graph read-only through Relate's `get_schema` / `read_cypher` tools. This is verified: reads return rows, and a `CREATE` is rejected with "Only MATCH queries are allowed".
 ```json
 { "mcpServers": { "brainprint-relate": { "command": "relate",
   "args": ["serve", "--mcp", "stdio", "--database", "graph/brainprint.rl", "--read-only"] } } }
 ```
-Stop the web server first, because the store allows one process to hold it at a time ([why](docs/RELATE_NOTES.md)).
+The config is **opt-in** on purpose. An MCP host keeps `relate serve` running, and its read lock stops the web app from opening the store for writing. Use one or the other at a time ([details](docs/RELATE_NOTES.md)).
 
 ## Demo
 _TODO (P6): 90-second video script in `docs/DEMO_SCRIPT.md`._
@@ -103,6 +144,8 @@ _TODO (P6)._ These will cover at least:
 - TRIBE outputs are model predictions of fMRI-like responses averaged across subjects, not measurements of any viewer.
 - The network grouping (7 networks) is a coarse aggregation chosen by us.
 - Feedback only tunes a light calibration layer. There is no training on TRIBE itself.
+- Brains are trained on few answers, so their accuracy is noisy. They model what the trainer said, not real people or markets. LLM predictions can be confidently wrong, which is why every prediction shows its evidence and every brain shows its measured accuracy.
+- Groq sees the claims and the brain's answers when it predicts. Use Ollama or run without an LLM for private material.
 
 ## License
 MIT for this project's code. TRIBE v2 and Relate keep their own licenses.

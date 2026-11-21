@@ -12,6 +12,11 @@ Everything BrainPrint knows lives in **one file, [`brainprint.rl`](brainprint.rl
 (:Feedback)-[:CONFIRMS|CONTRADICTS]->(:Insight)                your verdict on an insight
 (:Feedback)-[:UPDATED]->(:Lens)                                the calibration step it applied
 (:Segment)-[:SIMILAR_TO {score}]->(:Segment)                   vector neighbours in other pitches
+
+# Brain Library / Idea Lab (written by the web app)
+(:Brain)-[:STANCE {value: 1|0|-1, note}]->(:Claim)-[:MENTIONS]->(:Concept)   a trained mindset; VECTOR INDEX claim_embedding (384-d)
+(:Check {pending, predicted, actual, correct})-[:OF]->(:Brain), -[:ON]->(:Claim)   held-out self-tests
+(:Idea)-[:HAS_CLAIM]->(:Claim)   (:Idea)-[:PITCHED_AS]->(:Stimulus)   (:Brain)-[:PREDICTS {stance, confidence}]->(:Claim)
 ```
 - **Segment** = one second of a pitch. `embedding` holds the 148 Destrieux-region values for that second, z-scored within the pitch and L2-normalised. It's indexed by `CREATE VECTOR INDEX segment_embedding`, so "moments that look alike in the brain" become a vector search.
 - **ACTIVATES.strength** is a z-score against the pooled baseline of all pitches, so it's comparable across pitches. **local_z** is a z-score within the pitch, so it shows where the pitch dips relative to itself.
@@ -23,7 +28,7 @@ Full schema: [`schema.cypher`](schema.cypher). Seed content (networks, lenses, p
 ## Build and query
 ```bash
 pip install -r graph/requirements.txt -r tribe/requirements.txt
-python graph/ingest.py --reset     # rebuild brainprint.rl from tribe/cache/*.json (< 1 s)
+python graph/ingest.py --reset     # rebuild brainprint.rl from tribe/cache/*.json (< 1 s); refuses if you have trained brains/feedback unless --force
 python graph/ingest.py             # upsert; keeps Feedback and calibrated weights
 python graph/queries.py            # list the named queries
 python graph/queries.py all        # run all of them with default params

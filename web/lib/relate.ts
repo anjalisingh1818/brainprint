@@ -30,9 +30,11 @@ export function connection(): Connection {
     state.db = Database.open(DB_PATH);
   } catch (e) {
     const msg = String((e as Error).message ?? e);
-    if (msg.includes("locked")) {
+    // The Node client reports a lock held by another process as a generic "internal error".
+    if (msg.includes("locked") || msg.includes("internal error")) {
       throw new StoreLockedError(
-        "graph/brainprint.rl is locked by another process (ingest.py, queries.py or relate serve). Stop it and reload."
+        "Cannot open graph/brainprint.rl for writing: another process probably has it open " +
+          "(graph/ingest.py, graph/queries.py, or a `relate serve --mcp` server started by an MCP host). Stop it and reload."
       );
     }
     throw e;

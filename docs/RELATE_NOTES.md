@@ -193,3 +193,12 @@ So a writer needs exclusive access. Opening the 1.2 MB store, running a query, a
 - **No way to release a handle in Node:** `index.d.ts` exposes `Database.open/connect/checkpoint` and `Connection.query/queryAsync/begin/commit/rollback`, but nothing closes a handle. `relate_database_close` is declared in `index.js` but never called. A Node process therefore keeps the store's lock until it exits, even after the handle is dropped and garbage-collected (tested with `--expose-gc`).
 - **What BrainPrint does instead:** the Next.js server opens **one writable handle per process** (a `globalThis` singleton, so dev hot reloads don't open a second one) and uses it for every read and write. This supersedes §9.3. While `npm run dev` / `npm start` runs, `graph/ingest.py`, `graph/queries.py`, and `relate serve` will get `storage locked`. Stop the web server first. The API answers 503 with that hint if the server itself can't get the lock.
 - Next.js needs `serverExternalPackages: ["@relate/relate", "koffi"]`, because the client loads a native library through koffi.
+
+## 13. Verified in P6 (Relate CLI 1.2.0 MCP server, Windows) ✅
+
+- **MCP works:** an MCP host (Claude Code) spawned `relate serve --mcp stdio --database graph/brainprint.rl --read-only` from the config.
+  - `read_cypher` returned rows, together with plan-time notifications. For example, the planner suggested `CREATE INDEX ... FOR (n:Insight) ON (n.stimulus_id)`, which is now in `graph/schema.cypher`.
+  - A `CREATE` sent to `read_cypher` was rejected: `Only MATCH queries are allowed for read-query`.
+- **Lock conflict with the web app:** a running MCP server holds a read lock, so the web app cannot open the store writable. Through the Node client this surfaces only as a generic `internal error`, so `web/lib/relate.ts` now maps that error to a lock hint. For this reason the MCP config ships as the opt-in `docs/mcp.example.json` instead of an auto-loaded `.mcp.json`.
+- **Vector index #2:** `claim_embedding` uses 384 dimensions (local MiniLM embeddings via transformers.js). It is used per row with `CALL (c) { MATCH (k:Claim) SEARCH k IN (VECTOR INDEX claim_embedding FOR c.embedding LIMIT 150) SCORE AS sim ... }`, with filtering afterwards, as in §11.
+- **Node transactions:** `conn.begin()`, `commit()`, and `rollback()` work with `checkpoint()` (used for feedback and brain answers).

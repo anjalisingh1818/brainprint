@@ -161,13 +161,16 @@ Hard rules:
    recommend fixing it; if CONFIRMED, treat it as the priority and mention the founder's note.
 8. Format: at most 150 words, 3-5 "- " bullets plus one rewrite line. No headings, no tables, no horizontal rules.`;
 
-type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
+export type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
 
-async function chatComplete(provider: "groq" | "ollama", messages: ChatMsg[]): Promise<{ text: string; model: string }> {
+export async function chatComplete(
+  provider: "groq" | "ollama", messages: ChatMsg[], opts: { json?: boolean; maxTokens?: number; temperature?: number } = {}
+): Promise<{ text: string; model: string }> {
   const groq = provider === "groq";
   const url = groq ? "https://api.groq.com/openai/v1/chat/completions" : `${process.env.OLLAMA_URL ?? "http://localhost:11434"}/v1/chat/completions`;
   const model = groq ? process.env.GROQ_MODEL ?? "openai/gpt-oss-120b" : process.env.OLLAMA_MODEL ?? "qwen3:4b";
-  const body: Record<string, unknown> = { model, messages, temperature: 0.3, max_tokens: 1200 };
+  const body: Record<string, unknown> = { model, messages, temperature: opts.temperature ?? 0.3, max_tokens: opts.maxTokens ?? 1200 };
+  if (opts.json) body.response_format = { type: "json_object" };
   if (groq && model.startsWith("openai/gpt-oss")) body.reasoning_effort = "medium"; // evidence is small; spend tokens on accuracy
   const res = await fetch(url, {
     method: "POST",

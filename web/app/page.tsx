@@ -32,6 +32,12 @@ export default function Home() {
   const [lastFb, setLastFb] = useState<FeedbackResult | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // deep link from the Idea Lab: /?stimulus=pitch_jargon
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get("stimulus");
+    if (s) setStimulus(s);
+  }, []);
+
   useEffect(() => {
     Promise.all([q<OverviewRow>("overview"), q<LensRow>("lenses"), q<FeedbackLogRow>("feedback_log")])
       .then(([o, l, f]) => { setOverview(o); setLenses(l); setLog(f); })
@@ -108,7 +114,7 @@ export default function Home() {
   return (
     <main className="wrap">
       <header className="top">
-        <h1>BrainPrint</h1>
+        <h1>Pitch timeline</h1>
         <span className="sub" style={{ margin: 0 }}>predicted attention and processing signals, per second, from a Relate graph</span>
       </header>
       <p className="sub">

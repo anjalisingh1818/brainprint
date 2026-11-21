@@ -1,0 +1,27 @@
+{
+  "_about": "Two EXAMPLE brains so the demo has trained brains on first run. Their answers were scripted by the BrainPrint authors to represent a mindset; they are not real people or survey data. Train your own brains in the app. Stances: 1 agree, -1 disagree, 0 neutral.",
+  "brains": [
+    {
+      "id": "brain_cautious_investor",
+      "name": "Cautious investor (example)",
+      "description": "Scripted example: skeptical of hype, wants evidence, traction and a clear business model.",
+      "stances": {
+        "p_price_cut": 1, "p_ai_buzz": -1, "p_ai_skeptic": 1, "p_story": 1, "p_jargon": -1, "p_numbers": 1,
+        "p_traction": 1, "p_market_big": 1, "p_marketplace": 1, "p_unit_econ": 1, "p_team": 1, "p_fundraise_big": -1,
+        "p_features": -1, "p_mission": 0, "p_compliance": 1, "p_social_proof": 1, "p_speed": 1, "p_new_brand": 1,
+        "p_food_waste": 0, "p_sustain_price": 0, "p_ai_trust": -1, "p_humor": 0
+      }
+    },
+    {
+      "id": "brain_busy_freelancer",
+      "name": "Busy freelancer (example)",
+      "description": "Scripted example: time-poor, hates admin, price-sensitive, wants things simple and automated.",
+      "stances": {
+        "p_price_monthly": 1, "p_price_free": 1, "p_ai_trust": 1, "p_ai_buzz": 0, "p_privacy_bank": 1, "p_privacy_first": -1,
+        "p_freelance_admin": 1, "p_taxes_diy": -1, "p_automation": 1, "p_simple_ui": 1, "p_integrations": 1, "p_jargon": -1,
+        "p_numbers": 1, "p_story": 1, "p_features": -1, "p_mobile": 1, "p_speed": 1, "p_discount": 1, "p_notifications": 0,
+        "p_social_proof": 1, "p_mission": 0, "p_compliance": 0
+      }
+    }
+  ]
+}

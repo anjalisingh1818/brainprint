@@ -35,6 +35,12 @@ The brain heatmap draws the real fsaverage5 inflated surface that TRIBE predicts
 - **Select an insight**, then use **✓ Real issue** / **✗ Not an issue** with an optional note. This calls `POST /api/feedback`, which writes the Feedback node and nudges the current lens's weights. `DELETE /api/feedback?id=` undoes one feedback exactly, and `POST {action: "reset", lens}` resets a lens to its base weights.
 - **Calibration panel:** base vs current weights and the learning log. **Before/after panel:** a Revision's original vs revised pitch under the current lens.
 
+## Brain Library (`/brains`) and Idea Lab (`/ideas`)
+- `GET/POST /api/brains`: list, create, next question (creates a **pending Check** with the brain's prediction before the question is shown), answer, and `{action: "crossvalidate"}`. See [`lib/brains.ts`](lib/brains.ts).
+- `GET/POST /api/ideas`: create an idea (claims are extracted by Groq, or by the offline splitter), evaluate it (cached `PREDICTS` edges), and `advice=1` for recommendations with verified citations. See [`lib/ideas.ts`](lib/ideas.ts).
+- **Embeddings:** local `Xenova/all-MiniLM-L6-v2` (quantized, ~23 MB, downloaded once on first use, CPU only), see [`lib/embed.ts`](lib/embed.ts).
+- **First run:** the server seeds the probe bank ([`data/probe_claims.json`](data/probe_claims.json)) and the two example brains ([`data/example_brains.json`](data/example_brains.json)) if the graph has none.
+
 ## Agent panel
 `POST /api/agent` picks the model from `web/.env.local` (see `.env.example`): Groq (free) or Ollama for the **graph-first** explainer, Claude for the multi-step **tool agent**, or none for **graph-only** mode, which is also a checkbox in the panel. Details and guardrails are in the main README under "The agent".
 

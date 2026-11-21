@@ -1,7 +1,7 @@
 "use client";
-import { Fragment, useState, type ReactNode } from "react";
+import { useState } from "react";
+import RichText, { type Citation } from "@/components/RichText";
 
-type Citation = { label: string; id: string; verified: boolean };
 type TraceStep = { tool: string; input: unknown; rows: number; ms: number; error?: string };
 type Msg = { role: "user" | "assistant"; content: string; citations?: Citation[]; trace?: TraceStep[]; model?: string; error?: boolean };
 type Ctx = { stimulus: string; insight: string | null; t: number; lens: string };
@@ -14,50 +14,11 @@ const PROMPTS = [
   "What happened at similar moments in other pitches, and what fixed them?",
 ];
 
-// Tiny renderer: paragraphs, "- " bullets, **bold**, `code`, ### headings, and [[Label:id]] citation chips.
-function renderInline(text: string, cites: Map<string, Citation>, onCite: Props["onCite"]): ReactNode[] {
-  const parts = text.split(/(\[\[[A-Za-z]+:[^\]\s]+\]\]|\*\*[^*]+\*\*|`[^`]+`)/g);
-  return parts.map((p, i) => {
-    const c = /^\[\[([A-Za-z]+):([^\]\s]+)\]\]$/.exec(p);
-    if (c) {
-      const cit = cites.get(`${c[1]}:${c[2]}`);
-      const ok = cit?.verified ?? false;
-      return (
-        <button key={i} className={`cite${ok ? "" : " unverified"}`} onClick={() => onCite(c[1], c[2])}
-          title={ok ? `(:${c[1]} {id: "${c[2]}"}) was returned by a graph query` : "Not found in any tool result this turn"}>
-          {c[1]}:{c[2]}{ok ? "" : " ?"}
-        </button>
-      );
-    }
-    if (p.startsWith("**") && p.endsWith("**")) return <strong key={i}>{p.slice(2, -2)}</strong>;
-    if (p.startsWith("`") && p.endsWith("`")) return <code key={i}>{p.slice(1, -1)}</code>;
-    return <Fragment key={i}>{p}</Fragment>;
-  });
-}
-
 function Answer({ m, onCite }: { m: Msg; onCite: Props["onCite"] }) {
-  const cites = new Map((m.citations ?? []).map((c) => [`${c.label}:${c.id}`, c]));
-  const blocks: ReactNode[] = [];
-  let list: ReactNode[] = [];
-  const flush = () => {
-    if (list.length) blocks.push(<ul key={`u${blocks.length}`}>{list}</ul>);
-    list = [];
-  };
-  m.content.split("\n").forEach((line, i) => {
-    const l = line.trim();
-    if (/^[-*] /.test(l)) list.push(<li key={i}>{renderInline(l.slice(2), cites, onCite)}</li>);
-    else {
-      flush();
-      if (/^#{1,4} /.test(l)) blocks.push(<h4 key={i}>{renderInline(l.replace(/^#+ /, ""), cites, onCite)}</h4>);
-      else if (/^_.+_$/.test(l)) blocks.push(<p key={i} className="muted"><em>{renderInline(l.slice(1, -1), cites, onCite)}</em></p>);
-      else if (l) blocks.push(<p key={i}>{renderInline(l, cites, onCite)}</p>);
-    }
-  });
-  flush();
   const verified = (m.citations ?? []).filter((c) => c.verified).length;
   return (
     <div className="answer">
-      {blocks}
+      <RichText text={m.content} citations={m.citations} onCite={onCite} />
       {m.citations && (
         <div className="meta">
           {verified}/{m.citations.length} citations verified against graph query results

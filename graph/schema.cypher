@@ -13,6 +13,12 @@
 // (:Feedback {id, verdict, comment, lens, created_at, networks[], w_before[], w_after[]})-[:CONFIRMS|CONTRADICTS]->(:Insight)
 // (:Feedback)-[:UPDATED]->(:Lens)                      the calibration step this feedback applied (written by the web app)
 // (:Segment)-[:SIMILAR_TO {score}]->(:Segment)         top-k vector neighbours in OTHER stimuli
+//
+// Brain Library / Idea Lab (created by the web app, see web/lib/brains.ts and web/lib/ideas.ts):
+// (:Brain {id, name, description, example, checks, correct, cv_accuracy, cv_baseline})-[:STANCE {value, note}]->(:Claim)
+// (:Claim {id, text, source: probe|idea, embedding[384]})-[:MENTIONS]->(:Concept {id, name})    VECTOR INDEX claim_embedding
+// (:Check {pending, predicted, actual, correct, confidence})-[:OF]->(:Brain), -[:ON]->(:Claim)
+// (:Idea {id, title, text})-[:HAS_CLAIM]->(:Claim)   (:Idea)-[:PITCHED_AS]->(:Stimulus)   (:Brain)-[:PREDICTS]->(:Claim)
 
 CREATE CONSTRAINT project_id IF NOT EXISTS FOR (n:Project) REQUIRE n.id IS UNIQUE;
 CREATE CONSTRAINT stimulus_id IF NOT EXISTS FOR (n:Stimulus) REQUIRE n.id IS UNIQUE;
@@ -23,6 +29,7 @@ CREATE CONSTRAINT insight_id IF NOT EXISTS FOR (n:Insight) REQUIRE n.id IS UNIQU
 CREATE CONSTRAINT revision_id IF NOT EXISTS FOR (n:Revision) REQUIRE n.id IS UNIQUE;
 CREATE CONSTRAINT feedback_id IF NOT EXISTS FOR (n:Feedback) REQUIRE n.id IS UNIQUE;
 CREATE INDEX segment_stimulus IF NOT EXISTS FOR (n:Segment) ON (n.stimulus_id);
+CREATE INDEX insight_stimulus IF NOT EXISTS FOR (n:Insight) ON (n.stimulus_id);  // suggested by Relate's MCP planner notification
 
 // Brain-response embedding: 148 Destrieux-region z-scores (within the pitch) per second, L2-normalised.
 CREATE VECTOR INDEX segment_embedding IF NOT EXISTS
