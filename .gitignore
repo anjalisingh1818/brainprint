@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Node / Next.js
+node_modules/
+web/.next/
+web/out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Relate: keep the committed store, ignore scratch stores and auth tokens
+*.auth-token
+graph/*.tmp.rl
+.cypherlite/
+
+# Large media (demo clips are referenced, not committed; cached TRIBE JSON is committed)
+data/demo/*.mp4
+data/demo/*.mov
+data/demo/*.wav
+
+# OS
+.DS_Store
+Thumbs.db
