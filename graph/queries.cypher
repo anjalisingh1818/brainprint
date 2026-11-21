@@ -79,3 +79,67 @@ RETURN rv.id AS revision, a.id AS before, b.id AS after,
        COUNT { MATCH (:Insight {stimulus_id: b.id}) } AS insights_after,
        COUNT { MATCH (rv)-[:FIXES]->(:Insight) } AS claimed_fixes,
        COUNT { MATCH (rv)-[:FIXES]->(:Insight)<-[:CONFIRMS]-(:Feedback) } AS confirmed_fixes;
+
+// ---- UI queries (used by the web app) ----
+
+// name: lenses
+// description: All lenses with their live (calibrated) and base weights per network.
+// params:
+MATCH (l:Lens)-[w:WEIGHTS]->(n:Network)
+WITH l, n, w ORDER BY n.name
+RETURN l.id AS lens, l.name AS name, l.description AS description,
+       collect({network: n.name, w: w.w, base_w: w.base_w}) AS weights
+ORDER BY lens;
+
+// name: stimulus_meta
+// description: One pitch's metadata, project, region names (for the heatmap) and revisions it takes part in.
+// params: stimulus=pitch_jargon
+MATCH (st:Stimulus {id: $stimulus})
+OPTIONAL MATCH (p:Project)-[:HAS_STIMULUS]->(st)
+OPTIONAL MATCH (rv:Revision)-[e:FROM|TO]->(st)
+RETURN st.id AS stimulus, st.title AS title, st.source AS source, st.warning AS warning,
+       st.modality AS modality, st.duration_s AS seconds, st.script AS script, p.name AS project,
+       st.region_names AS region_names, collect(DISTINCT {revision: rv.id, role: type(e)}) AS revisions;
+
+// name: stimulus_seconds
+// description: Every second of a pitch: words, lens score, per-network strength/local_z, region z-scores.
+// params: stimulus=pitch_jargon, lens=engagement
+MATCH (:Stimulus {id: $stimulus})-[:HAS_SEGMENT]->(g:Segment)-[a:ACTIVATES]->(n:Network)
+OPTIONAL MATCH (n)<-[w:WEIGHTS]-(:Lens {id: $lens})
+WITH g, collect({network: n.name, strength: a.strength, local_z: a.local_z}) AS acts,
+     sum(coalesce(w.w, 0.0) * a.strength) AS score
+RETURN g.id AS segment, g.t AS t, g.text AS text, round(score, 3) AS score, acts, g.regions_z AS regions_z
+ORDER BY t;
+
+// name: graph_neighborhood
+// description: Triples around one pitch for the graph explorer: project, insights, lens, networks, revision, feedback, SIMILAR_TO.
+// params: stimulus=pitch_jargon
+MATCH (p:Project)-[r:HAS_STIMULUS]->(st:Stimulus {id: $stimulus})
+RETURN p.id AS a, 'Project' AS a_label, p.name AS a_name, type(r) AS rel, st.id AS b, 'Stimulus' AS b_label, st.title AS b_name, null AS w
+UNION ALL
+MATCH (i:Insight {stimulus_id: $stimulus})-[r:ABOUT]->(g:Segment)
+RETURN i.id AS a, 'Insight' AS a_label, i.kind AS a_name, type(r) AS rel, g.id AS b, 'Segment' AS b_label, 't=' + toString(g.t) AS b_name, null AS w
+UNION ALL
+MATCH (st:Stimulus {id: $stimulus})-[r:HAS_SEGMENT]->(g:Segment)<-[:ABOUT]-(:Insight)
+RETURN DISTINCT st.id AS a, 'Stimulus' AS a_label, st.title AS a_name, type(r) AS rel, g.id AS b, 'Segment' AS b_label, 't=' + toString(g.t) AS b_name, null AS w
+UNION ALL
+MATCH (i:Insight {stimulus_id: $stimulus})-[r:SEEN_THROUGH]->(l:Lens)
+RETURN i.id AS a, 'Insight' AS a_label, i.kind AS a_name, type(r) AS rel, l.id AS b, 'Lens' AS b_label, l.name AS b_name, null AS w
+UNION ALL
+MATCH (l:Lens)-[r:WEIGHTS]->(n:Network) WHERE EXISTS { MATCH (:Insight {stimulus_id: $stimulus})-[:SEEN_THROUGH]->(l) }
+RETURN l.id AS a, 'Lens' AS a_label, l.name AS a_name, type(r) AS rel, n.name AS b, 'Network' AS b_label, n.name AS b_name, r.w AS w
+UNION ALL
+MATCH (rv:Revision)-[r:FROM|TO]->(st:Stimulus) WHERE EXISTS { MATCH (rv)-[:FROM|TO]->(:Stimulus {id: $stimulus}) }
+RETURN rv.id AS a, 'Revision' AS a_label, rv.id AS a_name, type(r) AS rel, st.id AS b, 'Stimulus' AS b_label, st.title AS b_name, null AS w
+UNION ALL
+MATCH (rv:Revision)-[r:FIXES]->(i:Insight {stimulus_id: $stimulus})
+RETURN rv.id AS a, 'Revision' AS a_label, rv.id AS a_name, type(r) AS rel, i.id AS b, 'Insight' AS b_label, i.kind AS b_name, null AS w
+UNION ALL
+MATCH (f:Feedback)-[r:CONFIRMS|CONTRADICTS]->(i:Insight {stimulus_id: $stimulus})
+RETURN f.id AS a, 'Feedback' AS a_label, f.verdict AS a_name, type(r) AS rel, i.id AS b, 'Insight' AS b_label, i.kind AS b_name, null AS w
+UNION ALL
+MATCH (:Insight {stimulus_id: $stimulus})-[:ABOUT]->(g:Segment)-[r:SIMILAR_TO]->(h:Segment)
+WITH g, r, h ORDER BY r.score DESC
+WITH g, collect({h: h, s: r.score})[0] AS top
+RETURN g.id AS a, 'Segment' AS a_label, 't=' + toString(g.t) AS a_name, 'SIMILAR_TO' AS rel,
+       top.h.id AS b, 'Segment' AS b_label, top.h.stimulus_id + ' t=' + toString(top.h.t) AS b_name, round(top.s, 3) AS w;

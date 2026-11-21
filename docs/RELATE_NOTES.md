@@ -186,3 +186,10 @@ So a writer needs exclusive access. Opening the 1.2 MB store, running a query, a
 - `DETACH DELETE`
 - `SHOW INDEXES`
 - `toString(datetime())`
+
+## 12. Verified in P3 (Node `@relate/relate` 1.2.0, Windows) ✅
+
+- **Cross-language works:** Node opens the `.rl` file written by Python 1.2.0 and reads nodes, lists, and 148-dim embeddings. Vector `SEARCH` and `CALL (x) {}` work too. A Cypher INTEGER arrives as a JS `number` (a `bigint` only beyond 2^53).
+- **No way to release a handle in Node:** `index.d.ts` exposes `Database.open/connect/checkpoint` and `Connection.query/queryAsync/begin/commit/rollback`, but nothing closes a handle. `relate_database_close` is declared in `index.js` but never called. A Node process therefore keeps the store's lock until it exits, even after the handle is dropped and garbage-collected (tested with `--expose-gc`).
+- **What BrainPrint does instead:** the Next.js server opens **one writable handle per process** (a `globalThis` singleton, so dev hot reloads don't open a second one) and uses it for every read and write. This supersedes §9.3. While `npm run dev` / `npm start` runs, `graph/ingest.py`, `graph/queries.py`, and `relate serve` will get `storage locked`. Stop the web server first. The API answers 503 with that hint if the server itself can't get the lock.
+- Next.js needs `serverExternalPackages: ["@relate/relate", "koffi"]`, because the client loads a native library through koffi.

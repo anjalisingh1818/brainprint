@@ -41,5 +41,9 @@ This one file is shared by the CLI, the web app, and the agent.
 | `similar_moments` | Moments in **other** pitches that look alike in the brain (SIMILAR_TO / vector index), and whether they were flagged or fixed |
 | `revision_impact` | Before/after for a Revision: mean and minimum lens score, insight counts, claimed vs confirmed fixes |
 
+The file also holds 4 UI queries (`lenses`, `stimulus_meta`, `stimulus_seconds`, `graph_neighborhood`) that the web app uses for its panels.
+
 ## Concurrency (important)
-A writer needs exclusive access to a `.rl` file. While anything holds it writable, even read-only opens fail with `storage locked`, although several readers can share the file. Opening takes about 19 ms, so every BrainPrint process opens the store per operation and closes it straight away. If you see `storage locked`, another process is mid-write. Retry in a moment. Details: [docs/RELATE_NOTES.md §11](../docs/RELATE_NOTES.md).
+A writer needs exclusive access to a `.rl` file. While anything holds it writable, even read-only opens fail with `storage locked`, although several readers can share the file. The Python scripts open the store per run and close it again. The **web server holds one handle for as long as it runs**, because the Node client can't release one (see [docs/RELATE_NOTES.md §11–12](../docs/RELATE_NOTES.md)).
+
+**Stop the web server before running `ingest.py` or `queries.py`.**

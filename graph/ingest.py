@@ -164,12 +164,13 @@ def main() -> None:
         conn.execute(
             "MERGE (s:Stimulus {id: $id}) SET s.title = $title, s.modality = $modality, s.source = $source, "
             "s.warning = $warning, s.duration_s = $duration_s, s.script = $script, "
-            "s.mapping_version = $mv "
+            "s.mapping_version = $mv, s.region_names = $regions "
             "WITH s OPTIONAL MATCH (p:Project {id: $pid}) "
             "FOREACH (_ IN CASE WHEN p IS NULL THEN [] ELSE [1] END | MERGE (p)-[:HAS_STIMULUS]->(s))",
             {"id": sid, "title": d["title"], "modality": d["modality"], "source": d["source"],
              "warning": d.get("warning"), "duration_s": d["duration_s"], "script": d.get("script"),
-             "mv": d.get("atlas", {}).get("mapping_version"), "pid": stim_project.get(sid)},
+             "mv": d.get("atlas", {}).get("mapping_version"), "pid": stim_project.get(sid),
+             "regions": d["regions"]},
         )
         z_rows, lz_rows, seg_rows = [], [], []
         l_mean, l_std = pooled_stats([d], lambda _d, s: [s["networks"][n] for n in nets], len(nets))
@@ -180,18 +181,19 @@ def main() -> None:
             # embedding = the moment's region pattern relative to its own pitch, so similar
             # "shapes" (e.g. a dip) match across pitches with different overall levels
             emb = [(v - lr_mean[i]) / lr_std[i] for i, v in enumerate(s["regions"])]
+            regions_z = [round(x, 3) for x in emb]  # un-normalised, for the brain heatmap
             norm = math.sqrt(sum(x * x for x in emb)) or 1.0
             z_rows.append(z)
             lz_rows.append(lz)
             seg_rows.append({
                 "id": f"{sid}:{s['t']}", "t": s["t"], "text": s["text"],
-                "embedding": [round(x / norm, 6) for x in emb],
+                "embedding": [round(x / norm, 6) for x in emb], "regions_z": regions_z,
                 "acts": [{"net": n, "strength": round(z[n], 4), "local_z": round(lz[n], 4),
                           "raw": s["networks"][n]} for n in nets],
             })
         conn.execute(
             "MATCH (st:Stimulus {id: $sid}) UNWIND $rows AS r "
-            "MERGE (g:Segment {id: r.id}) SET g.stimulus_id = $sid, g.t = r.t, g.text = r.text, g.embedding = r.embedding "
+            "MERGE (g:Segment {id: r.id}) SET g.stimulus_id = $sid, g.t = r.t, g.text = r.text, g.embedding = r.embedding, g.regions_z = r.regions_z "
             "MERGE (st)-[:HAS_SEGMENT]->(g) "
             "WITH g, r UNWIND r.acts AS a MATCH (n:Network {name: a.net}) "
             "MERGE (g)-[x:ACTIVATES]->(n) SET x.strength = a.strength, x.local_z = a.local_z, x.raw = a.raw",

@@ -1,8 +1,8 @@
 // BrainPrint graph schema for Relate (relate-db 1.2.0). Applied by graph/ingest.py.
 // You can also run it by hand:  relate -d graph/brainprint.rl < graph/schema.cypher
 //
-// (:Project {id, name})-[:HAS_STIMULUS]->(:Stimulus {id, title, modality, source, duration_s, script})
-// (:Stimulus)-[:HAS_SEGMENT]->(:Segment {id, stimulus_id, t, text, embedding[148]})
+// (:Project {id, name})-[:HAS_STIMULUS]->(:Stimulus {id, title, modality, source, duration_s, script, region_names[148]})
+// (:Stimulus)-[:HAS_SEGMENT]->(:Segment {id, stimulus_id, t, text, embedding[148], regions_z[148]})
 // (:Segment)-[:NEXT]->(:Segment)                       time order within a stimulus
 // (:Segment)-[:ACTIVATES {strength, local_z, raw}]->(:Network)
 //     strength = z vs pooled baseline (comparable across pitches); local_z = z within the pitch

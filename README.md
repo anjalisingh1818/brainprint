@@ -48,7 +48,13 @@ python graph/ingest.py --reset        # → rebuilds graph/brainprint.rl (alread
 python graph/queries.py all           # → 6 named Cypher queries over the graph
 ```
 The graph model and the queries are described in [graph/README.md](graph/README.md).
-_The web app and agent steps arrive in P3–P4._
+
+**Web app** (reads `graph/brainprint.rl` directly through the Node Relate client):
+```bash
+cd web && npm install && npm run dev  # → http://localhost:3000
+```
+Stop the web server before re-running `graph/ingest.py` or `graph/queries.py`, because a Relate store has a single writer ([why](docs/RELATE_NOTES.md)). UI details: [web/README.md](web/README.md).
+_The agent arrives in P4._
 
 ## Reproducing the TRIBE step (GPU)
 The web app reads cached JSON from `tribe/cache/`, so you don't need a GPU to run the demo. To regenerate the cache with real TRIBE v2 predictions, open [`tribe/colab_run_demos.ipynb`](tribe/colab_run_demos.ipynb) in Colab, pick a GPU runtime, and request access to the gated Llama 3.2 model on Hugging Face. Then unzip the output into `tribe/cache/` and run `python tribe/validate.py`. The network mapping and the JSON format are described in [tribe/README.md](tribe/README.md).
