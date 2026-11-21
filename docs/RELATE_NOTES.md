@@ -145,7 +145,7 @@ Results come back as the wire envelope `{columns, columnTypes, rows:[{...}], sta
 
 1. **Store:** `graph/brainprint.rl`, one file in git, written by the Python ingest (`relate-db`).
 2. **Web reads:** Next.js API routes open the same file with `@relate/relate` `{readOnly:true}`. Python never runs at request time.
-3. **Writes from the web (feedback, P5):** there is only one writer at a time. The Next.js server owns the single writable connection while it runs. Ingest is an offline step: stop the dev server, run the ingest, start it again. This goes in the README.
+3. **Writes from the web (feedback, P5):** ~~the Next.js server owns the single writable connection~~ (revised in P2 after the lock tests in §11). Every request opens the store, runs its query, and closes it again (~19 ms). Feedback writes open the store writable just as briefly. Nothing holds a lock between requests, so ingest, `queries.py`, and `relate serve --mcp` can run whenever no request is in flight.
 4. **Agent (P4):** I'll build two paths for the same 3 tools:
    - (a) In-app, Claude tool-use calls `get_schema`/`read_cypher` against the Node connection, with the same names and contract as Relate MCP.
    - (b) Documented: `relate serve --mcp stdio --read-only`, so any MCP host (Claude Code, Claude Desktop) can query the committed graph directly.
@@ -159,3 +159,30 @@ Results come back as the wire envelope `{columns, columnTypes, rows:[{...}], sta
 - I haven't confirmed whether a `.rl` file written by Python 1.2.0 opens cleanly with the Node 1.2.x native package. I'll test it at the start of P3. Fallback: serve the graph through a small Python FastAPI or `relate serve --http`.
 - Git churn: every write rewrites the `.rl` file, which is a binary diff. That's acceptable, but I'll commit it only at phase milestones.
 - The whole graph must fit in memory. That's trivial at our size (3 clips × ~60 s × 7 networks).
+
+## 11. Verified in P2 (relate-db 1.2.0, Windows, single `.rl` file) ✅
+
+**Locking is stricter than the docs suggest for `.rl` files:**
+| Already open | Then try | Result |
+|---|---|---|
+| writer | second writer | ❌ `storage locked` |
+| writer | **reader** (`read_only=True`) | ❌ `storage locked`. The docs' "use read_only for readers" does not help while a writer is open |
+| reader | second reader | ✅ works |
+| reader | writer | ❌ `storage locked` |
+
+So a writer needs exclusive access. Opening the 1.2 MB store, running a query, and closing it takes **~19 ms**, which is why every request opens and closes its own connection (§9.3). `--read-only=live` (WAL following) is documented only for directory stores, not `.rl`.
+
+**Vector `SEARCH ... WHERE` accepts equality-style predicates only.** `WHERE s.stimulus_id <> $x` fails with `InvalidSearchFilterPredicate`. What works: a per-row subquery `CALL (x) { MATCH (s) SEARCH s IN (VECTOR INDEX idx FOR x.embedding LIMIT n) SCORE AS sim RETURN s, sim }`, over-fetching and filtering afterwards in `WITH ... WHERE`. `db.index.vector.queryNodes(idx, k, x.embedding)` also works per row.
+
+**Also confirmed working:**
+- `CREATE CONSTRAINT ... IF NOT EXISTS ... IS UNIQUE`
+- `CREATE VECTOR INDEX ... WITH [s.prop] OPTIONS {indexConfig: ...}`
+- `MERGE ... SET n += map`, `ON CREATE SET`
+- `UNWIND $rows` with nested maps and lists
+- `CALL (a, b) { ... }` scoped subqueries
+- `COUNT { MATCH ... }`
+- `collect({...})[0..$k]`
+- `FOREACH (_ IN CASE ... | MERGE ...)`
+- `DETACH DELETE`
+- `SHOW INDEXES`
+- `toString(datetime())`

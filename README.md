@@ -44,7 +44,10 @@ python -m venv .venv
 pip install -r graph/requirements.txt -r tribe/requirements.txt
 python graph/smoke_test.py            # → "OK relate-db 1.2.0: persisted 3 nodes ..."
 python tribe/validate.py --selftest   # → selftest OK + one line per cached clip
+python graph/ingest.py --reset        # → rebuilds graph/brainprint.rl (already committed; optional)
+python graph/queries.py all           # → 6 named Cypher queries over the graph
 ```
+The graph model and the queries are described in [graph/README.md](graph/README.md).
 _The web app and agent steps arrive in P3–P4._
 
 ## Reproducing the TRIBE step (GPU)
