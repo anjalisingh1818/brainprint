@@ -41,13 +41,14 @@ Requirements: Python ≥ 3.9 and Node 18+. You don't need a GPU, because the dem
 ```bash
 python -m venv .venv
 # Windows: .venv\Scripts\activate    macOS/Linux: source .venv/bin/activate
-pip install -r graph/requirements.txt
+pip install -r graph/requirements.txt -r tribe/requirements.txt
 python graph/smoke_test.py            # → "OK relate-db 1.2.0: persisted 3 nodes ..."
+python tribe/validate.py --selftest   # → selftest OK + one line per cached clip
 ```
 _The web app and agent steps arrive in P3–P4._
 
 ## Reproducing the TRIBE step (GPU)
-_TODO (P1)._
+The web app reads cached JSON from `tribe/cache/`, so you don't need a GPU to run the demo. To regenerate the cache with real TRIBE v2 predictions, open [`tribe/colab_run_demos.ipynb`](tribe/colab_run_demos.ipynb) in Colab, pick a GPU runtime, and request access to the gated Llama 3.2 model on Hugging Face. Then unzip the output into `tribe/cache/` and run `python tribe/validate.py`. The network mapping and the JSON format are described in [tribe/README.md](tribe/README.md).
 
 ## Using the graph from any MCP host
 _TODO (P4): `relate serve --mcp stdio --database graph/brainprint.rl --read-only`._

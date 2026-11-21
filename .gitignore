@@ -4,6 +4,8 @@ __pycache__/
 .venv/
 venv/
 .ipynb_checkpoints/
+tribe_cache/
+tribe/cache/*.npy
 
 # Node / Next.js
 node_modules/

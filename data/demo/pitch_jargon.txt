@@ -1,0 +1,9 @@
+Hi, we are Ledgerly.
+
+Ledgerly is an AI-native, end-to-end financial operations orchestration layer that leverages multi-agent reasoning, real-time ledger reconciliation, and a composable, API-first architecture to unlock synergistic value across heterogeneous accounting workflows for the long tail of independent knowledge workers, while ensuring SOC two compliant, zero-trust data governance and seamless interoperability with legacy ERP ecosystems, payment rails, and emerging open banking standards.
+
+Our proprietary embeddings-driven categorisation engine, combined with predictive cash-flow modelling and adaptive tax-liability forecasting, delivers a paradigm shift in how freelancers conceptualise their fiscal posture.
+
+In short: freelancers spend about five hours a month on receipts. Ledgerly does it for them.
+
+We are raising one million dollars.

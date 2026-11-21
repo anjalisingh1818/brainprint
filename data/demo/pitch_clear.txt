@@ -1,0 +1,9 @@
+Every week, a small bakery in our town throws away about forty loaves of bread. Not because the bread is bad, but because nobody knew it was there.
+
+We built Crumb. At six p.m., the bakery snaps one photo of what is left. Crumb turns that photo into a listing, and people within one kilometre get a ping: four loaves, half price, pick up before seven.
+
+Last month we ran this with twelve bakeries. They sold seventy percent of their leftovers and earned an extra three hundred euros each.
+
+Bakers pay nothing up front. We take ten percent of each sale.
+
+We are raising two hundred thousand euros to reach five hundred shops by next summer. If you have ever watched good food go in the bin, you already understand Crumb.
