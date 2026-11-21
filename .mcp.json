@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "brainprint-relate": {
+      "command": "relate",
+      "args": ["serve", "--mcp", "stdio", "--database", "graph/brainprint.rl", "--read-only"]
+    }
+  }
+}

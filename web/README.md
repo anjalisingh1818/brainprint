@@ -31,5 +31,8 @@ The brain heatmap draws the real fsaverage5 inflated surface that TRIBE predicts
 - **Scrub the timeline** by dragging. The words for that second and the brain map follow. Coloured bands are insights; click one to select it.
 - **Graph explorer:** hover a node or edge to see it in Cypher notation. Click an insight to select it, or click a segment to jump there. Dashed `SIMILAR_TO` edges lead to similar moments in *other* pitches, and clicking one switches pitch.
 
+## Agent panel
+`POST /api/agent` picks the model from `web/.env.local` (see `.env.example`): Groq (free) or Ollama for the **graph-first** explainer, Claude for the multi-step **tool agent**, or none for **graph-only** mode, which is also a checkbox in the panel. Details and guardrails are in the main README under "The agent".
+
 ## Gotcha
 The Node client can't release its lock on the store, so **stop `npm run dev` before running `python graph/ingest.py` or `python graph/queries.py`**. Otherwise they report `storage locked`.

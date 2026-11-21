@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Timeline from "@/components/Timeline";
 import BrainMap from "@/components/BrainMap";
 import GraphView from "@/components/GraphView";
+import AgentChat from "@/components/AgentChat";
 import {
   INSIGHT_LABEL, NETWORK_LABEL, q,
   type InsightRow, type LensRow, type OverviewRow, type SecondRow, type StimulusMeta, type Triple,
@@ -63,6 +64,20 @@ export default function Home() {
     if (sid !== stimulus) { setStimulus(sid); setSelected(null); }
     setT(tt);
   }, [stimulus]);
+
+  // Citation chips from the agent: jump to the cited node where the UI can show it.
+  const onCite = useCallback((label: string, id: string) => {
+    if (label === "Segment") pickSegment(id);
+    else if (label === "Insight") {
+      const sid = id.split(":")[0];
+      const start = Number(id.split(":").at(-1));
+      if (sid !== stimulus) setStimulus(sid);
+      setSelected(id);
+      if (!Number.isNaN(start)) setT(start);
+    } else if (label === "Stimulus") { setStimulus(id); setSelected(null); setT(0); }
+    else if (label === "Lens") setLens(id);
+    else if (label === "Network") setMode("networks");
+  }, [pickSegment, stimulus]);
 
   const lensRow = lenses.find((l) => l.lens === lens);
   const current = seconds.find((s) => s.t === t);
@@ -155,6 +170,11 @@ export default function Home() {
         </section>
 
       </div>
+
+      <section className="card" style={{ marginTop: 14 }}>
+        <h2>Ask the graph <span className="r">Claude + Relate tools · answers cite graph nodes</span></h2>
+        <AgentChat context={{ stimulus, insight: selected, t, lens }} onCite={onCite} />
+      </section>
 
       <footer className="note">
         Every panel is a named Cypher query from <code>graph/queries.cypher</code>, run on <code>graph/brainprint.rl</code> (a
