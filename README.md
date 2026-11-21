@@ -7,14 +7,37 @@
 
 Everything (predictions, insights, brains, answers, ideas, feedback) lives in one **Relate** knowledge graph: a single `.rl` file committed to this repo. Every answer cites the graph nodes it used, and those citations are verified.
 
-> Built for the **Relate by Neo4j Hackathon**, theme *"Context, connected"*.
+> Built for the **Relate by Neo4j Hackathon**, theme *"Context, connected"*. Demo video script: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
+
+> 📌 **Data status:** the three demo pitches in `tribe/cache/` are **synthetic placeholder curves**, and the app labels them as such everywhere. Real TRIBE v2 predictions take one GPU run of [`tribe/colab_run_demos.ipynb`](tribe/colab_run_demos.ipynb). Everything else (graph, brains, ideas, Wikidata, web checks) is real and works the same either way.
 
 > ⚠️ **What this is not:** TRIBE predicts average brain *activity*. It does not predict opinions, emotions, or buying intent. "Lenses" are weightings over brain networks, not people. A trained brain is a model of **the answers its trainer gave**, shown with its measured accuracy. It is not a real person, a customer survey, or a market forecast. See [Limitations](#limitations).
 
 ---
 
 ## Why Relate
-_TODO (P6). In short: the pitch, its segments, the predicted brain-network activations, the agent's insights, revisions, and your feedback form one connected context. The agent reasons over that context with Cypher and vector search, and the whole thing ships as a single portable file. Verified API notes: [docs/RELATE_NOTES.md](docs/RELATE_NOTES.md)._
+BrainPrint is one connected context. Each question the app answers **joins several kinds of knowledge** that would otherwise sit in separate stores:
+
+| question | what it joins in one Cypher query |
+|---|---|
+| "What happened at moments like this in other pitches, and did a revision fix them?" | TRIBE segments → `SIMILAR_TO` (vector index) → other pitches' segments → insights → `FIXES` ← revisions → your `Feedback` |
+| "How does this lens score each second?" | segments `-[:ACTIVATES]->` networks `<-[:WEIGHTS]-` lens, with weights recalibrated by your feedback (a live join, not a stored number) |
+| "Will this point land with the investor brain, and why?" | claim → vector index → the brain's most similar answered claims (`STANCE`) + concept paths `MENTIONS` → GraphRAG prediction |
+| "What is this idea about, and what else does it touch?" | claims → concepts → `SAME_AS` Wikidata entities → parent classes ← other ideas' concepts (bridges); web `Source`s `-[:EVIDENCE]->` claims |
+
+**How BrainPrint uses Relate**
+- **Mode:** a **single-file store**, [`graph/brainprint.rl`](graph/brainprint.rl), committed to git. It is embedded in-process, with no database server. The Python ingest writes it with `relate-db` and the Next.js server reads and writes it with `@relate/relate`; the same file works across both languages (verified).
+- **Optional MCP:** the Relate CLI's MCP server exposes the same file to any MCP host ([below](#using-the-graph-from-any-mcp-host)).
+- **Cypher features used:** `MERGE` / `UNWIND` batch upserts, `CALL (x) { … }` per-row subqueries, `COUNT { … }`, `EXISTS { … }`, `UNION ALL` graph projections, uniqueness constraints and range indexes, and explicit transactions (`begin` / `commit` / `rollback`) with `checkpoint()`.
+- **Vector search:** **two vector indexes**, `segment_embedding` (148-d predicted brain-response patterns) and `claim_embedding` (384-d MiniLM text embeddings). They are queried with the `SEARCH … VECTOR INDEX … SCORE AS` clause and `vector.similarity.cosine`.
+- **Safety:** `EXPLAIN`-based read-only classification for any model-generated Cypher.
+- **Single source of truth:** every UI panel and every agent fact is a named query in [`graph/queries.cypher`](graph/queries.cypher), the same file the Python CLI runs.
+
+**What we learned about Relate 1.2** (verified, with workarounds, in [docs/RELATE_NOTES.md](docs/RELATE_NOTES.md)):
+- **Locking:** a `.rl` writer is exclusive, and even read-only opens fail while it is open.
+- **Node handles:** the Node client has no `close()`, so a process keeps its lock until it exits. The server therefore holds one handle, and the MCP config is opt-in.
+- **Vector filters:** `SEARCH … WHERE` filters allow equality only. We over-fetch and then filter.
+- **Lock errors in Node** surface as a generic `internal error`.
 
 ## How it works
 ```
@@ -29,6 +52,10 @@ pitch (video/script) ──► /tribe  TRIBE v2 → per-second activation, 7 net
                                  · agent chat (cites graph nodes) · before/after
                                  · Brain Library (train mindset brains) · Idea Lab
                                    (idea → claims → concepts → per-brain predictions)
+                                        │
+            free services ─────────────┤  Groq (gpt-oss: predictions, advice, browser_search)
+                                        │  Wikidata + Wikipedia (entity linking)
+                                        │  MiniLM embeddings (local, CPU)
 ```
 
 ## Repo layout
@@ -38,10 +65,19 @@ pitch (video/script) ──► /tribe  TRIBE v2 → per-second activation, 7 net
 | `graph/` | Relate schema, ingest, queries, and the store `brainprint.rl` |
 | `web/` | Next.js + TypeScript app |
 | `data/demo/` | Demo pitch scripts and clip references (media files are not committed) |
-| `docs/` | `RELATE_NOTES.md`, demo script, design notes |
+| `web/data/` | Probe statements and the two example brains (scripted answers) used to seed the Brain Library |
+| `docs/` | [`RELATE_NOTES.md`](docs/RELATE_NOTES.md) (verified Relate API + findings), [`DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md), [`mcp.example.json`](docs/mcp.example.json) |
 
 ## Quick start
-Requirements: Python ≥ 3.9 and Node 18+. You don't need a GPU, because the demo uses cached TRIBE output.
+**Run the demo** (needs Node 18+ only; the graph is already in the repo). Prebuilt Relate binaries ship for Windows x64, Linux x64/arm64 and macOS:
+```bash
+git clone https://github.com/anjalisingh1818/brainprint && cd brainprint/web
+npm install
+npm run dev        # → http://localhost:3000  (Pitch timeline · Brain Library · Idea Lab)
+```
+Everything works with no key: the agent and the Idea Lab fall back to graph-only answers, and the demo idea's LLM predictions are cached in the graph. For written answers, live predictions, entity linking and web checks, copy `web/.env.example` to `web/.env.local`, add a **free** `GROQ_API_KEY` (console.groq.com, no card needed), and restart. On first use the app downloads a 23 MB embedding model.
+
+**Rebuild the graph and run the Python tools** (Python ≥ 3.9, no GPU; stop the web server first):
 
 ```bash
 python -m venv .venv
@@ -49,7 +85,8 @@ python -m venv .venv
 pip install -r graph/requirements.txt -r tribe/requirements.txt
 python graph/smoke_test.py            # → "OK relate-db 1.2.0: persisted 3 nodes ..."
 python tribe/validate.py --selftest   # → selftest OK + one line per cached clip
-python graph/ingest.py --reset        # → rebuilds graph/brainprint.rl (already committed; optional)
+python graph/ingest.py                # → upserts tribe/cache/*.json into graph/brainprint.rl (keeps brains, ideas, feedback)
+# python graph/ingest.py --reset --force   # full rebuild: also deletes the demo brains/idea (re-seeded on next web start)
 python graph/queries.py all           # → 6 named Cypher queries over the graph
 ```
 The graph model and the queries are described in [graph/README.md](graph/README.md).
@@ -158,16 +195,18 @@ Relate ships an MCP server in its CLI. With the [Relate CLI installed](https://r
 The config is **opt-in** on purpose. An MCP host keeps `relate serve` running, and its read lock stops the web app from opening the store for writing. Use one or the other at a time ([details](docs/RELATE_NOTES.md)).
 
 ## Demo
-_TODO (P6): 90-second video script in `docs/DEMO_SCRIPT.md`._
+A 90-second walkthrough, shot by shot with narration and an honesty checklist: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
 
 ## Limitations
-_TODO (P6)._ These will cover at least:
-- TRIBE outputs are model predictions of fMRI-like responses averaged across subjects, not measurements of any viewer.
+- **The demo TRIBE curves are synthetic placeholders** until the Colab notebook is run. The UI and the agent say so on every placeholder pitch.
+- TRIBE outputs are model predictions of fMRI-like responses averaged across subjects, not measurements of any viewer. TRIBE v2 is licensed CC BY-NC 4.0 (non-commercial).
 - The network grouping (7 networks) is a coarse aggregation chosen by us.
 - Feedback only tunes a light calibration layer. There is no training on TRIBE itself.
 - Brains are trained on few answers, so their accuracy is noisy. They model what the trainer said, not real people or markets. LLM predictions can be confidently wrong, which is why every prediction shows its evidence and every brain shows its measured accuracy.
 - Groq sees the claims and the brain's answers when it predicts. Use Ollama or run without an LLM for private material.
 - Wikidata links are chosen by a model from search candidates and can still be wrong (check the QID link). Web checks depend on what the search returns and on a model's reading of it. They are pointers to sources, not fact-checking.
+- **One process at a time** may hold `graph/brainprint.rl` for writing (the web server, `ingest.py`, or an MCP server). This is a Relate single-file constraint, documented in [RELATE_NOTES](docs/RELATE_NOTES.md).
+- Built and tested on Windows 11 with Node 24 and Python 3.12. Other platforms rely on Relate's published binaries and haven't been tested by us.
 
 ## License
 MIT for this project's code. TRIBE v2 and Relate keep their own licenses.
