@@ -200,3 +200,15 @@ td.cell.s1 .ic { color: var(--net-motor); }
 td.cell.s-1 .ic { color: var(--net-default_mode); }
 td.cell.su .ic, td.cell.s0 .ic { color: var(--muted); }
 td.cell.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* world knowledge (P7) */
+.knowledge h4 { margin: 14px 0 6px; font-size: 13px; }
+table.kt td { vertical-align: top; }
+table.kt a { color: var(--accent); }
+.verdict { font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; }
+.v-supports .verdict, .chip.v-supports { color: var(--net-motor); border-color: var(--net-motor); }
+.v-contradicts .verdict, .chip.v-contradicts { color: var(--net-default_mode); border-color: var(--net-default_mode); }
+.v-mixed .verdict, .chip.v-mixed { color: var(--net-attention); border-color: var(--net-attention); }
+.v-unclear .verdict, .chip.v-unclear { color: var(--muted); }
+.webcheck { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+.webcheck a { color: var(--accent); }

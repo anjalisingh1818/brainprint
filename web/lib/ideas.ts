@@ -8,6 +8,7 @@ import { checkpoint, connection, type Row } from "@/lib/relate";
 import { ensureSeeded, predictMany, retrieve, upsertClaims, STANCE_LABEL, type Prediction, type Stance } from "@/lib/brains";
 import { activeProvider, chatComplete } from "@/lib/explain";
 import { extractCitations } from "@/lib/agent";
+import { linkConcepts } from "@/lib/knowledge";
 
 const q = (cypher: string, params: Record<string, unknown> = {}) => connection().query(cypher, params as never).rows as Row[];
 const slug = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40);
@@ -72,6 +73,8 @@ export async function createIdea(input: { title: string; text: string; stimulus?
      MERGE (i)-[r:HAS_CLAIM]->(c) SET r.order = k`, { id, n: claims.length });
   if (input.stimulus) q(`MATCH (i:Idea {id: $id}), (s:Stimulus {id: $sid}) MERGE (i)-[:PITCHED_AS]->(s)`, { id, sid: input.stimulus });
   checkpoint();
+  // entity-link the new concepts to Wikidata in the background (Wikimedia rate limits make this take ~1 min)
+  linkConcepts(id).catch((e) => console.warn(`[ideas] concept linking failed: ${String(e).slice(0, 200)}`));
   return { id, claims: claims.length, extracted_by: by };
 }
 
@@ -154,7 +157,9 @@ baseline (or that it was not measured yet). Brains are NOT real people, customer
 Use only the facts. Cite every fact you use by copying its tag exactly, e.g. [[Claim:idea_x:c3]] [[Brain:brain_busy_freelancer]] [[Concept:price]].
 Output: 3-5 "- " bullets on which points are predicted to land or put off which brains and why (the answers or concepts behind it),
 then a line "Recommendations:" followed by 2-3 "- " bullets with concrete edits to the idea text (quote the original words).
-Never invent statistics, customers or results. Max 220 words.`;
+Never invent statistics, customers or results. Max 220 words.
+KNOWLEDGE lines link concepts to Wikidata; WEB lines are web-search results judged by a model (cite the [[Source:...]] tags,
+say "a web check found ...", and treat vendor pages as weak evidence). Use them when they change a recommendation.`;
 
 function accText(b: { cv: { accuracy: number; n: number; baseline: number } | null; checks: number; accuracy: number | null }) {
   if (b.cv) return `cross-validated accuracy ${Math.round(b.cv.accuracy * 100)}% (baseline ${Math.round(b.cv.baseline * 100)}%, n=${b.cv.n})`;
@@ -182,6 +187,15 @@ export async function recommend(id: string) {
       L.push(`  -> ${b.name}: predicted ${cell.label}${cell.stance === null ? "" : ` (confidence ${cell.confidence})`}${why ? `; because it ${why}` : ""}${cons ? `; concepts: ${cons}` : ""}.`);
     }
   }
+  // world knowledge: Wikidata meaning of the idea's concepts, and web checks of its claims
+  const kn = q(`MATCH (:Idea {id: $id})-[:HAS_CLAIM]->(:Claim)-[:MENTIONS]->(x:Concept)-[:SAME_AS]->(w:WikiEntity)
+                RETURN DISTINCT x.id AS concept, w.qid AS qid, w.label AS label, w.description AS description`, { id: ev.idea.id });
+  for (const k of kn) L.push(`KNOWLEDGE ${tag("Concept", String(k.concept))} = Wikidata ${k.qid} "${k.label}": ${k.description || "(no description)"}`);
+  const web = q(`MATCH (:Idea {id: $id})-[:HAS_CLAIM]->(c:Claim) WHERE c.web_checked_at IS NOT NULL
+                 OPTIONAL MATCH (s:Source)-[e:EVIDENCE {used: true}]->(c)
+                 RETURN c.id AS claim, c.web_verdict AS verdict, c.web_summary AS summary, collect(s.url)[0..3] AS urls`, { id: ev.idea.id });
+  for (const w of web)
+    L.push(`WEB ${tag("Claim", String(w.claim))} check: ${w.verdict}. ${w.summary ?? ""} Sources: ${(w.urls as string[]).filter(Boolean).map((u) => tag("Source", u)).join(" ") || "none"}`);
   const facts = L.join("\n");
   const provider = activeProvider();
   let answer = "", model = "template (no LLM)", note = "";

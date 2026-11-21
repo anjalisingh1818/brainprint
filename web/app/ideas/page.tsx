@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import RichText, { type Citation } from "@/components/RichText";
+import KnowledgePanel, { type Knowledge } from "@/components/KnowledgePanel";
 import { q, type OverviewRow, type StimulusMeta } from "@/lib/types";
 
 type IdeaRow = { id: string; title: string; claims: number; stimulus: string | null };
@@ -43,6 +44,7 @@ export default function IdeasPage() {
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [stimulus, setStimulus] = useState("");
+  const [know, setKnow] = useState<Knowledge | null>(null);
 
   const loadIdeas = useCallback(async () => {
     const r = await api<{ ideas: IdeaRow[] }>("/api/ideas");
@@ -61,7 +63,32 @@ export default function IdeasPage() {
     } catch (e) { setError(String((e as Error).message ?? e)); }
     finally { setBusy(null); }
   }, []);
-  useEffect(() => { if (sel) { setCell(null); setEv(null); evaluate(sel); } }, [sel, evaluate]);
+  const loadKnowledge = useCallback(async (id: string) => {
+    try { setKnow(await api<Knowledge>(`/api/knowledge?idea=${encodeURIComponent(id)}`)); } catch { setKnow(null); }
+  }, []);
+  useEffect(() => {
+    if (!sel) return;
+    setCell(null); setEv(null); setKnow(null);
+    evaluate(sel);
+    loadKnowledge(sel);
+    // new ideas are entity-linked in the background (~1 min): refresh the knowledge panel a few times
+    const timers = [30_000, 75_000, 150_000].map((ms) => setTimeout(() => loadKnowledge(sel), ms));
+    return () => timers.forEach(clearTimeout);
+  }, [sel, evaluate, loadKnowledge]);
+
+  const linkNow = async () => {
+    if (!sel) return;
+    setBusy("Linking concepts to Wikidata (rate-limited, can take a minute)…");
+    try { await api("/api/knowledge", { action: "link", idea: sel }); await loadKnowledge(sel); }
+    catch (e) { setError(String((e as Error).message ?? e)); }
+    finally { setBusy(null); }
+  };
+  const webCheck = async (claim: string) => {
+    setBusy("Searching the web for this point and judging the sources…");
+    try { await api("/api/knowledge", { action: "check", claim }); if (sel) await loadKnowledge(sel); }
+    catch (e) { setError(String((e as Error).message ?? e)); }
+    finally { setBusy(null); }
+  };
 
   const loadExample = async (sid: string) => {
     const m = (await q<StimulusMeta>("stimulus_meta", { stimulus: sid }))[0];
@@ -83,7 +110,8 @@ export default function IdeasPage() {
     } catch (e) { setError(String((e as Error).message ?? e)); setBusy(null); }
   };
   const onCite = (label: string, id: string) => {
-    if (label === "Claim") setFocusClaim(id);
+    if (label === "Source") window.open(id, "_blank", "noopener");
+    else if (label === "Claim") setFocusClaim(id);
     else if (label === "Brain" && ev) setCell({ brain: id, claim: focusClaim ?? ev.claims[0]?.claim });
   };
 
@@ -160,7 +188,15 @@ export default function IdeasPage() {
                       <tr key={c.claim} className={focusClaim === c.claim ? "focus" : ""}>
                         <td>
                           {c.text}
-                          <div className="chips">{c.concepts.map((x) => <span key={x} className="chip">{x}</span>)}</div>
+                          <div className="chips">
+                            {c.concepts.map((x) => <span key={x} className="chip">{x}</span>)}
+                            {(() => {
+                              const wc = know?.checks.find((k) => k.claim === c.claim);
+                              return wc
+                                ? <span className={`chip verdict v-${wc.verdict}`} title={wc.summary}>web: {wc.verdict}</span>
+                                : <button className="chip-btn" disabled={!!busy} onClick={() => webCheck(c.claim)} title="Search the web for evidence about this point">web check</button>;
+                            })()}
+                          </div>
                         </td>
                         {ev.brains.map((b) => {
                           const x = ev.cells.find((y) => y.brain === b.brain && y.claim === c.claim);
@@ -214,6 +250,14 @@ export default function IdeasPage() {
                 <button className="bad" disabled={!!busy} onClick={() => teach(cur.brain, cur.claim, -1)}>✗ Puts off</button>
               </div>
               <p className="muted small">★ = answers the model said it relied on. Teaching records a self-check and re-predicts this brain.</p>
+            </section>
+          )}
+
+          {know && know.concepts.length > 0 && (
+            <section className="card">
+              <h2>World knowledge <span className="r">Wikidata · Wikipedia · web</span></h2>
+              <KnowledgePanel k={know} busy={!!busy} onLink={linkNow}
+                claimText={(id) => ev?.claims.find((c) => c.claim === id)?.text ?? id} />
             </section>
           )}
 

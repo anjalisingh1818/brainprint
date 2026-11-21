@@ -41,6 +41,11 @@ The brain heatmap draws the real fsaverage5 inflated surface that TRIBE predicts
 - **Embeddings:** local `Xenova/all-MiniLM-L6-v2` (quantized, ~23 MB, downloaded once on first use, CPU only), see [`lib/embed.ts`](lib/embed.ts).
 - **First run:** the server seeds the probe bank ([`data/probe_claims.json`](data/probe_claims.json)) and the two example brains ([`data/example_brains.json`](data/example_brains.json)) if the graph has none.
 
+## World knowledge (`/api/knowledge`)
+- `POST {action: "link", idea?, relink?}`: entity-links concepts to Wikidata (candidate search + Groq disambiguation restricted to the candidates), plus parent classes and the Wikipedia summary.
+- `POST {action: "check", claim}`: web check through Groq `browser_search`. Only pages the tool returned are stored as `(:Source)`; a second tool-free call gives the verdict.
+- `GET ?idea=`: concepts with links, bridges through shared Wikidata classes, web checks, and graph triples. See [`lib/knowledge.ts`](lib/knowledge.ts).
+
 ## Agent panel
 `POST /api/agent` picks the model from `web/.env.local` (see `.env.example`): Groq (free) or Ollama for the **graph-first** explainer, Claude for the multi-step **tool agent**, or none for **graph-only** mode, which is also a checkbox in the panel. Details and guardrails are in the main README under "The agent".
 

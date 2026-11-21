@@ -19,6 +19,8 @@
 // (:Claim {id, text, source: probe|idea, embedding[384]})-[:MENTIONS]->(:Concept {id, name})    VECTOR INDEX claim_embedding
 // (:Check {pending, predicted, actual, correct, confidence})-[:OF]->(:Brain), -[:ON]->(:Claim)
 // (:Idea {id, title, text})-[:HAS_CLAIM]->(:Claim)   (:Idea)-[:PITCHED_AS]->(:Stimulus)   (:Brain)-[:PREDICTS]->(:Claim)
+// (:Concept)-[:SAME_AS {match}]->(:WikiEntity {qid, label, description, wikipedia, summary})-[:INSTANCE_OF|SUBCLASS_OF]->(:WikiEntity)
+// (:Source {url, title, snippet})-[:EVIDENCE {used, by}]->(:Claim)        web check (web/lib/knowledge.ts)
 
 CREATE CONSTRAINT project_id IF NOT EXISTS FOR (n:Project) REQUIRE n.id IS UNIQUE;
 CREATE CONSTRAINT stimulus_id IF NOT EXISTS FOR (n:Stimulus) REQUIRE n.id IS UNIQUE;

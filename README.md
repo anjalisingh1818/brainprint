@@ -128,6 +128,27 @@ What we learned, measured rather than assumed:
 
 With 22 answers the numbers are noisy, which is why every brain shows its own measured accuracy. Treat predictions from a brain that doesn't beat its baseline as weak.
 
+## World knowledge: Wikidata, Wikipedia and web checks
+An idea's concepts don't stay isolated strings. On the Idea Lab's **World knowledge** card:
+- **Entity linking** (a core knowledge-graph technique) links each concept to Wikidata in three steps:
+  1. **Candidate generation:** Wikidata search.
+  2. **In-context disambiguation:** Groq sees the concept, the claims it came from, and the candidates. It may only pick a QID from the candidate list, or say "none" and suggest a better search term (`ai` → *artificial intelligence*).
+  3. **Exact-label fallback:** without an LLM, only exact label matches are accepted.
+
+  Links are stored as `(:Concept)-[:SAME_AS]->(:WikiEntity)`, with Wikidata parents `-[:INSTANCE_OF|SUBCLASS_OF]->(:WikiEntity)` and the Wikipedia summary. Our first heuristic linker mapped `ai` to *Anguilla* and `receipts` to a US appropriations act. Disambiguation in context fixed that.
+- **Bridges:** other statements in the graph (probe statements, other ideas) that share a Wikidata entity or parent class with this idea, ignoring over-generic classes such as *academic discipline*. This is the "context, connected" part: two ideas about *subscription* and *recurring payment* meet through Wikidata even if they never share a word.
+- **Web check** of a point (button on each row):
+  1. **Search:** Groq's built-in `browser_search` (gpt-oss models) searches the web.
+  2. **Store sources:** **only pages the tool actually returned** are stored, as `(:Source {url, title, snippet})-[:EVIDENCE]->(:Claim)`.
+  3. **Judge:** a second, tool-free call judges the claim against those sources (supports / contradicts / mixed / unclear) and marks which ones it used.
+
+  We don't keep the search model's inline citations: in testing it attributed a number to a "FreshBooks survey" that none of the opened pages contained.
+- **Advice** cites `[[Concept:...]]` with its Wikidata meaning and `[[Source:url]]` for web evidence, and the server verifies those citations too.
+
+**Free-tier budget:** Groq's free plan allows about **200,000 tokens per day per model**. One idea evaluation costs roughly 3–5k tokens per brain, a web check about 5k, cross-validating a brain about 10k, and entity-linking all 58 seed concepts about 40k. That's comfortable for a demo, but a long session can exhaust it (we did). The app then falls back to graph-only predictions and template answers instead of failing. Setting `GROQ_MODEL=openai/gpt-oss-20b` uses a separate daily quota.
+
+APIs: Wikidata `wbsearchentities` / `wbgetentities`, Wikipedia REST `page/summary`, and Groq `browser_search`. Requests are serial and spaced out, honouring `Retry-After`. Linking all 58 seed concepts takes a few minutes once, and a new idea's concepts are linked in the background.
+
 ## Using the graph from any MCP host
 Relate ships an MCP server in its CLI. With the [Relate CLI installed](https://relatedb.ai), copy [`docs/mcp.example.json`](docs/mcp.example.json) to `.mcp.json` (Claude Code) or into your MCP host's config. The host can then query the same single-file graph read-only through Relate's `get_schema` / `read_cypher` tools. This is verified: reads return rows, and a `CREATE` is rejected with "Only MATCH queries are allowed".
 ```json
@@ -146,6 +167,7 @@ _TODO (P6)._ These will cover at least:
 - Feedback only tunes a light calibration layer. There is no training on TRIBE itself.
 - Brains are trained on few answers, so their accuracy is noisy. They model what the trainer said, not real people or markets. LLM predictions can be confidently wrong, which is why every prediction shows its evidence and every brain shows its measured accuracy.
 - Groq sees the claims and the brain's answers when it predicts. Use Ollama or run without an LLM for private material.
+- Wikidata links are chosen by a model from search candidates and can still be wrong (check the QID link). Web checks depend on what the search returns and on a model's reading of it. They are pointers to sources, not fact-checking.
 
 ## License
 MIT for this project's code. TRIBE v2 and Relate keep their own licenses.

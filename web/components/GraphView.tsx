@@ -12,9 +12,9 @@ type L = SimulationLinkDatum<N> & { rel: string; w: number | null };
 const COLOR: Record<string, string> = {
   Project: "#5b5bd6", Stimulus: "#3b7dd8", Segment: "#9aa0a6", Insight: "#d98a00",
   Lens: "#149c8c", Network: "#9b51e0", Revision: "#3a9d4a", Feedback: "#d64545",
-  Brain: "#5b5bd6", Claim: "#d98a00", Concept: "#149c8c", Idea: "#3b7dd8",
+  Brain: "#5b5bd6", Claim: "#d98a00", Concept: "#149c8c", Idea: "#3b7dd8", WikiEntity: "#7c8592", Source: "#d64545",
 };
-const R: Record<string, number> = { Project: 11, Stimulus: 10, Insight: 9, Lens: 8, Network: 7, Revision: 9, Feedback: 7, Segment: 4, Brain: 12, Claim: 5, Concept: 7, Idea: 10 };
+const R: Record<string, number> = { Project: 11, Stimulus: 10, Insight: 9, Lens: 8, Network: 7, Revision: 9, Feedback: 7, Segment: 4, Brain: 12, Claim: 5, Concept: 7, Idea: 10, WikiEntity: 6, Source: 5 };
 const W = 760, H = 520;
 
 type Props = { triples: Triple[]; onSegment: (id: string) => void; onInsight: (id: string) => void };

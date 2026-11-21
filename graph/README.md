@@ -17,6 +17,10 @@ Everything BrainPrint knows lives in **one file, [`brainprint.rl`](brainprint.rl
 (:Brain)-[:STANCE {value: 1|0|-1, note}]->(:Claim)-[:MENTIONS]->(:Concept)   a trained mindset; VECTOR INDEX claim_embedding (384-d)
 (:Check {pending, predicted, actual, correct})-[:OF]->(:Brain), -[:ON]->(:Claim)   held-out self-tests
 (:Idea)-[:HAS_CLAIM]->(:Claim)   (:Idea)-[:PITCHED_AS]->(:Stimulus)   (:Brain)-[:PREDICTS {stance, confidence}]->(:Claim)
+
+# World knowledge (P7)
+(:Concept)-[:SAME_AS {match}]->(:WikiEntity {qid, label, description, wikipedia, summary})-[:INSTANCE_OF|SUBCLASS_OF]->(:WikiEntity)
+(:Source {url, title, snippet})-[:EVIDENCE {used, by}]->(:Claim {web_verdict, web_summary})
 ```
 - **Segment** = one second of a pitch. `embedding` holds the 148 Destrieux-region values for that second, z-scored within the pitch and L2-normalised. It's indexed by `CREATE VECTOR INDEX segment_embedding`, so "moments that look alike in the brain" become a vector search.
 - **ACTIVATES.strength** is a z-score against the pooled baseline of all pitches, so it's comparable across pitches. **local_z** is a z-score within the pitch, so it shows where the pitch dips relative to itself.
