@@ -3,7 +3,7 @@
 // GET  /api/ideas?id=..               -> claims x brains predictions (+ evidence), stored as PREDICTS edges
 // GET  /api/ideas?id=..&refresh=1     -> re-predict, ignoring cached PREDICTS edges
 // GET  /api/ideas?id=..&advice=1      -> the same plus recommendations with verified citations
-// POST /api/ideas {title, text, stimulus?} -> split into claims (Groq, or offline splitter) and store
+// POST /api/ideas {title, text, kind?} -> split into claims (Groq, or offline splitter) and store
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createIdea, evaluateIdea, listIdeas, recommend } from "@/lib/ideas";
@@ -30,7 +30,7 @@ export async function GET(req: Request) {
   }
 }
 
-const Create = z.object({ title: z.string().min(1).max(120), text: z.string().min(20).max(6000), stimulus: z.string().nullable().optional() });
+const Create = z.object({ title: z.string().min(1).max(120), text: z.string().min(20).max(6000), kind: z.enum(["problem", "idea"]).optional() });
 
 export async function POST(req: Request) {
   const c = Create.safeParse(await req.json().catch(() => null));

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import GraphView from "@/components/GraphView";
+import TalkPanel from "@/components/TalkPanel";
 import type { Triple } from "@/lib/types";
 
 type Cv = { accuracy: number; n: number; baseline: number; by: string; at: string } | null;
@@ -13,8 +14,9 @@ type Reveal = {
   prediction: { stance: number | null; label: string; confidence: number; by: string; because: { claim: string; text: string; stance: number | null }[] };
   actual: number; correct: boolean; abstained: boolean; updated?: boolean; previous?: number;
 };
+type Style = { tone: string; vocabulary: string; sentence_length: string; signature_phrases: string[] } | null;
 type Detail = {
-  brain: BrainRow; profile: { concept: string; name: string; mean: number; n: number }[];
+  brain: BrainRow & { style: Style; utterances: number }; profile: { concept: string; name: string; mean: number; n: number }[];
   checks: { id: string; text: string; predicted: number; actual: number; correct: boolean; abstained: boolean; confidence: number; by: string }[];
   triples: Triple[];
 };
@@ -45,6 +47,7 @@ export default function BrainsPage() {
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [mode, setMode] = useState<"talk" | "quiz">("talk");
 
   const loadList = useCallback(async () => {
     const [b, i] = await Promise.all([api<{ brains: BrainRow[] }>("/api/brains"), api<{ ideas: IdeaRow[] }>("/api/ideas")]);
@@ -68,8 +71,8 @@ export default function BrainsPage() {
     if (!sel) return;
     setReveal(null); setQuestion(null);
     loadDetail(sel).catch((e) => setError(String(e.message ?? e)));
-    loadQuestion(sel, ideaFilter).catch((e) => setError(String(e.message ?? e)));
-  }, [sel, ideaFilter, loadDetail, loadQuestion]);
+    if (mode === "quiz") loadQuestion(sel, ideaFilter).catch((e) => setError(String(e.message ?? e)));
+  }, [sel, ideaFilter, mode, loadDetail, loadQuestion]);
 
   const answer = async (value: 1 | 0 | -1) => {
     if (!sel || !question) return;
@@ -159,8 +162,23 @@ export default function BrainsPage() {
             </section>
           )}
 
+          {b && (
+            <div className="seg" role="group" aria-label="Training mode">
+              <button aria-pressed={mode === "talk"} onClick={() => setMode("talk")}>Talk (natural conversation)</button>
+              <button aria-pressed={mode === "quiz"} onClick={() => setMode("quiz")}>Quiz (predict, then check)</button>
+            </div>
+          )}
+
+          {b && mode === "talk" && (
+            <section className="card">
+              <h2>Talk <span className="r">builds beliefs and style from what you say</span></h2>
+              <TalkPanel brain={b.id} name={b.name} onLearned={() => { if (sel) { loadDetail(sel).catch(() => null); loadList().catch(() => null); } }} />
+            </section>
+          )}
+
+          {mode === "quiz" && (
           <section className="card">
-            <h2>Train <span className="r">the brain predicts first, then you answer</span></h2>
+            <h2>Quiz <span className="r">the brain predicts first, then you answer</span></h2>
             <div className="toolbar">
               <label className="muted small">Ask about:{" "}
                 <select value={ideaFilter} onChange={(e) => setIdeaFilter(e.target.value)}>
@@ -170,7 +188,7 @@ export default function BrainsPage() {
               </label>
             </div>
             {busy && <p className="muted">{busy}</p>}
-            {!busy && !question && !reveal && <p className="empty">Nothing left to ask. Add an idea in the Idea Lab for new points.</p>}
+            {!busy && !question && !reveal && <p className="empty">Nothing left to ask. Ask the panel a new question for new points, or switch to Talk.</p>}
             {question && !reveal && (
               <div className="question">
                 <p className="qtext">“{question.text}”</p>
@@ -214,6 +232,21 @@ export default function BrainsPage() {
               </div>
             )}
           </section>
+          )}
+
+          {detail?.brain.style && (
+            <section className="card">
+              <h2>How {detail.brain.name} talks <span className="r">learned from {detail.brain.utterances} message{detail.brain.utterances === 1 ? "" : "s"}</span></h2>
+              <div className="kpis">
+                <div><b className="small">{detail.brain.style.tone || "–"}</b><span>tone</span></div>
+                <div><b className="small">{detail.brain.style.vocabulary || "–"}</b><span>vocabulary</span></div>
+                <div><b className="small">{detail.brain.style.sentence_length || "–"}</b><span>sentences</span></div>
+              </div>
+              {detail.brain.style.signature_phrases?.length > 0 && (
+                <div className="chips">{detail.brain.style.signature_phrases.map((x) => <span key={x} className="chip">“{x}”</span>)}</div>
+              )}
+            </section>
+          )}
 
           {detail && (
             <div className="grid two">

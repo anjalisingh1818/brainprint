@@ -17,7 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { checkpoint, connection, type Row } from "@/lib/relate";
 import { EMBED_DIMS, embed } from "@/lib/embed";
-import { activeProvider, chatComplete } from "@/lib/explain";
+import { activeProvider, chatComplete } from "@/lib/llm";
 
 const q = (cypher: string, params: Record<string, unknown> = {}) => connection().query(cypher, params as never).rows as Row[];
 const DATA = path.join(process.cwd(), "data");
@@ -395,4 +395,25 @@ export async function crossValidate(brain: string) {
     { brain, acc: r3(ok / n), n, baseline, by, at: now() });
   checkpoint();
   return { accuracy: r3(ok / n), n, baseline, by, llm_predictions: llm, graph_fallbacks: n - llm };
+}
+
+/** Delete a brain and everything that belongs only to it (stances, utterances, checks, responses). Claims stay: other brains may share them. */
+export function deleteBrain(brain: string) {
+  const conn = connection();
+  conn.begin();
+  try {
+    q(`MATCH (b:Brain {id: $brain}) OPTIONAL MATCH (b)-[:SAID]->(u:Utterance) DETACH DELETE u`, { brain });
+    q(`MATCH (k:Check)-[:OF]->(:Brain {id: $brain}) DETACH DELETE k`, { brain });
+    q(`MATCH (r:Response)-[:BY]->(:Brain {id: $brain}) DETACH DELETE r`, { brain });
+    q(`MATCH (b:Brain {id: $brain}) DETACH DELETE b`, { brain });
+    // talk-created claims nobody holds any more
+    q(`MATCH (c:Claim {source: 'talk'}) WHERE NOT EXISTS { MATCH (c)<-[:STANCE]-(:Brain) } AND NOT EXISTS { MATCH (c)<-[:HAS_CLAIM]-(:Idea) }
+       DETACH DELETE c`);
+    conn.commit();
+  } catch (e) {
+    conn.rollback();
+    throw e;
+  }
+  checkpoint();
+  return { deleted: brain };
 }

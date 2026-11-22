@@ -7,7 +7,7 @@
 // Free services: Wikidata API, Wikipedia REST API, Groq built-in browser_search (gpt-oss models).
 import "server-only";
 import { checkpoint, connection, type Row } from "@/lib/relate";
-import { activeProvider, chatComplete } from "@/lib/explain";
+import { activeProvider, chatComplete } from "@/lib/llm";
 
 const q = (cypher: string, params: Record<string, unknown> = {}) => connection().query(cypher, params as never).rows as Row[];
 const UA = { "user-agent": "BrainPrint/0.1 (Relate hackathon demo; non-commercial)" };

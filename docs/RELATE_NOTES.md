@@ -1,4 +1,6 @@
-# Relate — verified API notes for BrainPrint
+# Relate: verified API notes for BrainPrint
+
+> Sections 9–12 were written while BrainPrint was a TRIBE pitch-timeline app (now in `legacy/`); the Relate findings in them (locking, Node handles, SEARCH filters, transactions) still apply to the Brain Panel.
 
 Researched 2026-11-21. Sources:
 - **Engine repo:** https://github.com/relatedb/relate (Apache-2.0, Rust, v1.2.x). `github.com/neo4j/relate` **does not exist** (404); the hackathon's "Relate by Neo4j" is this repo.

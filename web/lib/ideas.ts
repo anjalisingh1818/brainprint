@@ -1,13 +1,13 @@
 // Idea Lab: an idea (text, optionally linked to a TRIBE-analysed pitch) -> claims -> each brain's predicted stance
 // -> recommendations. Everything is stored in the Relate graph:
 //   (:Idea {id, title, text})-[:HAS_CLAIM]->(:Claim {source:'idea'})-[:MENTIONS]->(:Concept)
-//   (:Idea)-[:PITCHED_AS]->(:Stimulus)          (optional link to the TRIBE timeline of the same pitch)
+//   Idea.kind: 'problem' (a question for the panel) or 'idea' (a pitch whose points the brains react to)
 //   (:Brain)-[:PREDICTS {stance, confidence, score, at}]->(:Claim)
 import "server-only";
 import { checkpoint, connection, type Row } from "@/lib/relate";
 import { ensureSeeded, predictMany, retrieve, upsertClaims, STANCE_LABEL, type Prediction, type Stance } from "@/lib/brains";
-import { activeProvider, chatComplete } from "@/lib/explain";
-import { extractCitations } from "@/lib/agent";
+import { activeProvider, chatComplete } from "@/lib/llm";
+import { extractCitations } from "@/lib/citations";
 import { linkConcepts } from "@/lib/knowledge";
 
 const q = (cypher: string, params: Record<string, unknown> = {}) => connection().query(cypher, params as never).rows as Row[];
@@ -15,7 +15,7 @@ const slug = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]
 
 type ExtractedClaim = { text: string; concepts: string[] };
 
-const EXTRACT_SYSTEM = `You split a product idea or pitch into the separate CLAIMS a listener could agree or disagree with.
+const EXTRACT_SYSTEM = `You split a product idea, pitch, or problem statement into the separate CLAIMS a listener could agree or disagree with.
 Return JSON: {"claims": [{"text": "...", "concepts": ["...", "..."]}]}
 Rules: 4-10 claims. Each claim is one short first-person-neutral sentence (max 20 words) that keeps the pitch's own facts and
 numbers; do not add facts. "concepts": 1-3 short lowercase noun phrases naming what the claim is about
@@ -62,16 +62,15 @@ async function extractClaims(text: string): Promise<{ claims: ExtractedClaim[]; 
   return { claims: fallbackClaims(text), by: "sentence splitter (no LLM)" };
 }
 
-export async function createIdea(input: { title: string; text: string; stimulus?: string | null }) {
+export async function createIdea(input: { title: string; text: string; kind?: "problem" | "idea" }) {
   await ensureSeeded();
   const id = `idea_${slug(input.title) || "untitled"}_${Date.now().toString(36).slice(-5)}`;
   const { claims, by } = await extractClaims(input.text);
-  q(`CREATE (i:Idea {id: $id, title: $title, text: $text, created_at: $at, extracted_by: $by})`,
-    { id, title: input.title.slice(0, 120), text: input.text.slice(0, 6000), at: new Date().toISOString(), by });
+  q(`CREATE (i:Idea {id: $id, title: $title, text: $text, kind: $kind, created_at: $at, extracted_by: $by})`,
+    { id, title: input.title.slice(0, 120), text: input.text.slice(0, 6000), kind: input.kind ?? "idea", at: new Date().toISOString(), by });
   await upsertClaims(claims.map((c, k) => ({ id: `${id}:c${k + 1}`, text: c.text, concepts: c.concepts, source: "idea" })));
   q(`MATCH (i:Idea {id: $id}) UNWIND range(1, $n) AS k MATCH (c:Claim {id: $id + ':c' + toString(k)})
      MERGE (i)-[r:HAS_CLAIM]->(c) SET r.order = k`, { id, n: claims.length });
-  if (input.stimulus) q(`MATCH (i:Idea {id: $id}), (s:Stimulus {id: $sid}) MERGE (i)-[:PITCHED_AS]->(s)`, { id, sid: input.stimulus });
   checkpoint();
   // entity-link the new concepts to Wikidata in the background (Wikimedia rate limits make this take ~1 min)
   linkConcepts(id).catch((e) => console.warn(`[ideas] concept linking failed: ${String(e).slice(0, 200)}`));
@@ -79,8 +78,9 @@ export async function createIdea(input: { title: string; text: string; stimulus?
 }
 
 export function listIdeas() {
-  return q(`MATCH (i:Idea) OPTIONAL MATCH (i)-[:HAS_CLAIM]->(c) OPTIONAL MATCH (i)-[:PITCHED_AS]->(s:Stimulus)
-            RETURN i.id AS id, i.title AS title, i.created_at AS created_at, count(DISTINCT c) AS claims, s.id AS stimulus
+  return q(`MATCH (i:Idea) OPTIONAL MATCH (i)-[:HAS_CLAIM]->(c) OPTIONAL MATCH (r:Response)-[:TO]->(i)
+            RETURN i.id AS id, i.title AS title, coalesce(i.kind, 'idea') AS kind, i.created_at AS created_at,
+                   count(DISTINCT c) AS claims, count(DISTINCT r) AS responses
             ORDER BY created_at DESC`);
 }
 
@@ -95,8 +95,8 @@ const LANDS: Record<string, string> = { "1": "lands", "0": "neutral", "-1": "put
  */
 export async function evaluateIdea(id: string, opts: { refresh?: boolean } = {}) {
   await ensureSeeded();
-  const idea = q(`MATCH (i:Idea {id: $id}) OPTIONAL MATCH (i)-[:PITCHED_AS]->(s:Stimulus)
-                  RETURN i.id AS id, i.title AS title, i.text AS text, i.extracted_by AS extracted_by, s.id AS stimulus`, { id })[0];
+  const idea = q(`MATCH (i:Idea {id: $id})
+                  RETURN i.id AS id, i.title AS title, i.text AS text, coalesce(i.kind, 'idea') AS kind, i.extracted_by AS extracted_by`, { id })[0];
   if (!idea) throw new Error(`unknown idea ${id}`);
   const claims = q(`MATCH (:Idea {id: $id})-[r:HAS_CLAIM]->(c:Claim) OPTIONAL MATCH (c)-[:MENTIONS]->(x:Concept)
                     RETURN c.id AS claim, c.text AS text, r.order AS ord, collect(x.name) AS concepts ORDER BY ord`, { id });

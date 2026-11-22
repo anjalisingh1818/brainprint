@@ -4,10 +4,13 @@
 // GET  /api/brains?id=..&next=1[&idea=..] -> next training question (least-confident unanswered claim)
 // POST /api/brains {name, description}    -> create a brain
 // POST /api/brains {brain, claim, value: 1|0|-1, note?} -> answer (resolves the pending held-out self-check)
+// POST /api/brains {brain, action: "talk", message} -> learn beliefs + style from natural conversation (Talk mode)
+// GET  /api/brains?id=..&conversation=1 -> the brain's conversation
 // POST /api/brains {brain, action: "crossvalidate"} -> 4-fold CV accuracy vs majority baseline, stored on the Brain
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { answer, brainStats, createBrain, crossValidate, ensureSeeded, nextQuestion } from "@/lib/brains";
+import { answer, brainStats, createBrain, crossValidate, deleteBrain, ensureSeeded, nextQuestion } from "@/lib/brains";
+import { conversation, talk } from "@/lib/talk";
 import { connection, StoreLockedError, type Row } from "@/lib/relate";
 
 export const runtime = "nodejs";
@@ -27,7 +30,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ brains: brains.map((b) => ({ ...b, ...brainStats(String(b.id)) })) });
     }
     if (u.searchParams.get("next")) return NextResponse.json({ question: await nextQuestion(id, u.searchParams.get("idea") ?? undefined) });
-    const brain = q(`MATCH (b:Brain {id: $id}) RETURN b.id AS id, b.name AS name, b.description AS description, b.example AS example`, { id })[0];
+    if (u.searchParams.get("conversation")) return NextResponse.json({ conversation: conversation(id) });
+    const brain = q(`MATCH (b:Brain {id: $id}) OPTIONAL MATCH (b)-[:SAID]->(u:Utterance)
+                     RETURN b.id AS id, b.name AS name, b.description AS description, b.example AS example, b.style_json AS style_json,
+                            count(u) AS utterances`, { id })[0];
     if (!brain) return NextResponse.json({ error: "unknown brain" }, { status: 404 });
     const profile = q(
       `MATCH (:Brain {id: $id})-[s:STANCE]->(:Claim)-[:MENTIONS]->(x:Concept)
@@ -43,7 +49,8 @@ export async function GET(req: Request) {
        UNION ALL
        MATCH (:Brain {id: $id})-[:STANCE]->(c:Claim)-[r:MENTIONS]->(x:Concept)
        RETURN c.id AS a, 'Claim' AS a_label, left(c.text, 40) AS a_name, 'MENTIONS' AS rel, x.id AS b, 'Concept' AS b_label, x.name AS b_name, null AS w`, { id });
-    return NextResponse.json({ brain: { ...brain, ...brainStats(id) }, profile, checks, triples });
+    const { style_json, ...rest } = brain;
+    return NextResponse.json({ brain: { ...rest, style: style_json ? JSON.parse(String(style_json)) : null, ...brainStats(id) }, profile, checks, triples });
   } catch (e) {
     return fail(e);
   }
@@ -51,12 +58,15 @@ export async function GET(req: Request) {
 
 const Create = z.object({ name: z.string().min(1).max(80), description: z.string().max(400).default("") });
 const Evaluate = z.object({ brain: z.string(), action: z.literal("crossvalidate") });
+const Talk = z.object({ brain: z.string(), action: z.literal("talk"), message: z.string().min(3).max(4000) });
 const Answer = z.object({ brain: z.string(), claim: z.string(), value: z.union([z.literal(1), z.literal(0), z.literal(-1)]), note: z.string().max(300).optional() });
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   try {
     await ensureSeeded();
+    const t = Talk.safeParse(body);
+    if (t.success) return NextResponse.json(await talk(t.data.brain, t.data.message));
     const ev = Evaluate.safeParse(body);
     if (ev.success) return NextResponse.json(await crossValidate(ev.data.brain));
     const a = Answer.safeParse(body);
@@ -64,6 +74,18 @@ export async function POST(req: Request) {
     const c = Create.safeParse(body);
     if (c.success) return NextResponse.json(createBrain(c.data.name, c.data.description));
     return NextResponse.json({ error: "bad request body" }, { status: 400 });
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// DELETE /api/brains?id=.. -> remove a brain (its stances, conversation, checks and panel responses)
+export async function DELETE(req: Request) {
+  const id = new URL(req.url).searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "missing id" }, { status: 400 });
+  try {
+    await ensureSeeded();
+    return NextResponse.json(deleteBrain(id));
   } catch (e) {
     return fail(e);
   }

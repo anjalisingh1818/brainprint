@@ -1,216 +1,308 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import Timeline from "@/components/Timeline";
-import BrainMap from "@/components/BrainMap";
 import GraphView from "@/components/GraphView";
-import AgentChat from "@/components/AgentChat";
-import InsightCard from "@/components/InsightCard";
-import Compare from "@/components/Compare";
-import LearningLog from "@/components/LearningLog";
-import {
-  NETWORK_LABEL, q, send,
-  type FeedbackLogRow, type FeedbackResult, type InsightRow, type LensRow, type OverviewRow, type SecondRow,
-  type StimulusMeta, type Triple,
-} from "@/lib/types";
+import KnowledgePanel, { type Knowledge } from "@/components/KnowledgePanel";
+import PointMatrix, { type Evaluation } from "@/components/PointMatrix";
+import type { Triple } from "@/lib/types";
+import examples from "@/data/examples.json";
 
-export default function Home() {
-  const [overview, setOverview] = useState<OverviewRow[]>([]);
-  const [lenses, setLenses] = useState<LensRow[]>([]);
-  const [stimulus, setStimulus] = useState("pitch_jargon");
-  const [lens, setLens] = useState("engagement");
-  const [mode, setMode] = useState<"lens" | "networks">("lens");
-  const [meta, setMeta] = useState<StimulusMeta | null>(null);
-  const [seconds, setSeconds] = useState<SecondRow[]>([]);
-  const [insights, setInsights] = useState<InsightRow[]>([]);
+type Cv = { accuracy: number; n: number; baseline: number } | null;
+type Stats = { answers: number; checks: number; accuracy: number | null; cv: Cv };
+type BrainRow = { id: string; name: string; description: string; example: boolean } & Stats;
+type Cited = { claim: string; text: string; stance: number; quote: string | null };
+type Resp = {
+  id: string; brain: string; name: string; reaction: string; says: string; concerns: string[]; would_do: string; by: string;
+  cited: Cited[]; stats: Stats;
+};
+type Synthesis = {
+  consensus: string[]; conflicts: { topic: string; sides: { brain: string; position: string }[] }[];
+  joint_solution: string; next_questions: string[]; by: string;
+};
+type Ask = { id: string; title: string; kind: string; claims: number; responses: number };
+
+const pct = (x: number | null | undefined) => (x == null ? "–" : `${Math.round(x * 100)}%`);
+const STANCE: Record<string, string> = { "1": "agrees", "0": "neutral on", "-1": "disagrees" };
+const REACT_ICON: Record<string, string> = { enthusiastic: "🤩", positive: "🙂", neutral: "😐", skeptical: "🤨", opposed: "🙅" };
+
+async function api<T>(url: string, body?: unknown): Promise<T> {
+  const res = await fetch(url, body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : { cache: "no-store" });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error ?? res.statusText);
+  return json as T;
+}
+
+function accuracyText(s: Stats) {
+  if (s.cv) return `CV ${pct(s.cv.accuracy)} vs ${pct(s.cv.baseline)} baseline`;
+  if (s.checks >= 5) return `self-test ${pct(s.accuracy)} (${s.checks})`;
+  return `${s.answers} beliefs · accuracy not measured`;
+}
+
+export default function PanelPage() {
+  const [brains, setBrains] = useState<BrainRow[]>([]);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [asks, setAsks] = useState<Ask[]>([]);
+  const [kind, setKind] = useState<"problem" | "idea">("problem");
+  const [title, setTitle] = useState("");
+  const [text, setText] = useState("");
+  const [sel, setSel] = useState<string | null>(null);
+  const [selAsk, setSelAsk] = useState<{ title: string; text: string; kind: string } | null>(null);
+  const [responses, setResponses] = useState<Resp[]>([]);
+  const [pending, setPending] = useState<string[]>([]);
+  const [failed, setFailed] = useState<Record<string, string>>({});
+  const [syn, setSyn] = useState<Synthesis | null>(null);
   const [triples, setTriples] = useState<Triple[]>([]);
-  const [t, setT] = useState(0);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [matrix, setMatrix] = useState<Evaluation | null>(null);
+  const [know, setKnow] = useState<Knowledge | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // bumped after every graph write (feedback, undo, reset) so all panels re-query Relate
-  const [version, setVersion] = useState(0);
-  const [log, setLog] = useState<FeedbackLogRow[]>([]);
-  const [lastFb, setLastFb] = useState<FeedbackResult | null>(null);
-  const [busy, setBusy] = useState(false);
 
-  // deep link from the Idea Lab: /?stimulus=pitch_jargon
-  useEffect(() => {
-    const s = new URLSearchParams(window.location.search).get("stimulus");
-    if (s) setStimulus(s);
+  const loadLists = useCallback(async () => {
+    const [b, i] = await Promise.all([api<{ brains: BrainRow[] }>("/api/brains"), api<{ ideas: Ask[] }>("/api/ideas")]);
+    setBrains(b.brains);
+    setPicked((p) => (p.size ? p : new Set(b.brains.map((x) => x.id))));
+    setAsks(i.ideas);
+  }, []);
+  useEffect(() => { loadLists().catch((e) => setError(String(e.message ?? e))); }, [loadLists]);
+
+  const loadState = useCallback(async (id: string) => {
+    const s = await api<{ idea: { title: string; text: string; kind: string } | null; responses: Resp[]; synthesis: Synthesis | null; triples: Triple[] }>(
+      `/api/panel?idea=${encodeURIComponent(id)}`);
+    if (s.idea) setSelAsk(s.idea);
+    setResponses(s.responses); setSyn(s.synthesis); setTriples(s.triples);
   }, []);
 
-  useEffect(() => {
-    Promise.all([q<OverviewRow>("overview"), q<LensRow>("lenses"), q<FeedbackLogRow>("feedback_log")])
-      .then(([o, l, f]) => { setOverview(o); setLenses(l); setLog(f); })
-      .catch((e) => setError(String(e.message ?? e)));
-  }, [version]);
+  const open = async (a: Ask) => {
+    setSel(a.id); setMatrix(null); setKnow(null); setFailed({}); setPending([]); setSelAsk({ title: a.title, text: "", kind: a.kind });
+    await loadState(a.id).catch((e) => setError(String(e.message ?? e)));
+  };
 
-  useEffect(() => {
-    let live = true;
-    Promise.all([
-      q<StimulusMeta>("stimulus_meta", { stimulus }),
-      q<InsightRow>("insight_evidence", { stimulus }),
-      q<Triple>("graph_neighborhood", { stimulus }),
-    ])
-      .then(([m, i, g]) => {
-        if (!live) return;
-        setMeta(m[0] ?? null); setInsights(i); setTriples(g); setError(null);
-      })
-      .catch((e) => setError(String(e.message ?? e)));
-    return () => { live = false; };
-  }, [stimulus, version]);
+  const runPanel = async (id: string, ids: string[]) => {
+    setResponses([]); setSyn(null); setFailed({}); setPending(ids);
+    for (const brain of ids) {
+      try {
+        const r = await api<Resp>("/api/panel", { action: "respond", idea: id, brain });
+        setResponses((rs) => [...rs.filter((x) => x.brain !== brain), r]);
+      } catch (e) {
+        setFailed((f) => ({ ...f, [brain]: String((e as Error).message ?? e) }));
+      }
+      setPending((p) => p.filter((x) => x !== brain));
+    }
+    if (ids.length >= 2) {
+      setBusy("Synthesising the panel…");
+      try { setSyn(await api<Synthesis>("/api/panel", { action: "synthesize", idea: id })); }
+      catch (e) { setError(String((e as Error).message ?? e)); }
+      finally { setBusy(null); }
+    }
+    await loadState(id).catch(() => null);
+    await loadLists().catch(() => null);
+  };
 
-  useEffect(() => {
-    let live = true;
-    q<SecondRow>("stimulus_seconds", { stimulus, lens })
-      .then((s) => live && setSeconds(s))
-      .catch((e) => setError(String(e.message ?? e)));
-    return () => { live = false; };
-  }, [stimulus, lens, version]);
+  const ask = async () => {
+    const ids = [...picked];
+    if (!ids.length) { setError("Pick at least one brain."); return; }
+    setBusy("Reading your question and splitting it into points…");
+    try {
+      const r = await api<{ id: string }>("/api/panel", { action: "ask", title, text, kind });
+      setSel(r.id); setSelAsk({ title, text, kind }); setMatrix(null); setKnow(null); setBusy(null);
+      await runPanel(r.id, ids);
+    } catch (e) { setError(String((e as Error).message ?? e)); setBusy(null); }
+  };
 
-  const write = useCallback(async (fn: () => Promise<unknown>) => {
-    setBusy(true);
-    try { await fn(); setVersion((v) => v + 1); setError(null); }
+  const showMatrix = async () => {
+    if (!sel) return;
+    setBusy("Predicting each brain's reaction to each point (one call per brain)…");
+    try { setMatrix(await api<Evaluation>(`/api/ideas?id=${encodeURIComponent(sel)}`)); }
     catch (e) { setError(String((e as Error).message ?? e)); }
-    finally { setBusy(false); }
-  }, []);
-  const giveFeedback = (insight: string, verdict: "confirm" | "contradict", comment: string) =>
-    write(async () => setLastFb(await send<FeedbackResult>("POST", "/api/feedback", { insight, verdict, comment: comment || undefined, lens })));
-  const undoFeedback = (id: string) => write(async () => { await send("DELETE", `/api/feedback?id=${encodeURIComponent(id)}`); setLastFb(null); });
-  const resetLens = () => write(async () => { await send("POST", "/api/feedback", { action: "reset", lens }); setLastFb(null); });
+    finally { setBusy(null); }
+  };
+  const showKnowledge = async () => {
+    if (!sel) return;
+    setBusy("Loading world knowledge…");
+    try { setKnow(await api<Knowledge>(`/api/knowledge?idea=${encodeURIComponent(sel)}`)); }
+    catch (e) { setError(String((e as Error).message ?? e)); }
+    finally { setBusy(null); }
+  };
+  const linkNow = async () => {
+    if (!sel) return;
+    setBusy("Linking concepts to Wikidata (rate-limited, about a minute)…");
+    try { await api("/api/knowledge", { action: "link", idea: sel }); setKnow(await api<Knowledge>(`/api/knowledge?idea=${encodeURIComponent(sel)}`)); }
+    catch (e) { setError(String((e as Error).message ?? e)); }
+    finally { setBusy(null); }
+  };
+  const teach = async (brain: string, claim: string, value: 1 | 0 | -1) => {
+    setBusy("Teaching the brain…");
+    try { await api("/api/brains", { brain, claim, value }); if (sel) setMatrix(await api<Evaluation>(`/api/ideas?id=${encodeURIComponent(sel)}`)); }
+    catch (e) { setError(String((e as Error).message ?? e)); }
+    finally { setBusy(null); }
+  };
 
-  const pickInsight = useCallback((id: string) => {
-    setSelected(id);
-    const ins = insights.find((i) => i.insight === id);
-    if (ins) setT(ins.t_start);
-  }, [insights]);
-
-  const pickSegment = useCallback((id: string) => {
-    const i = id.lastIndexOf(":");
-    const sid = id.slice(0, i), tt = Number(id.slice(i + 1));
-    if (sid !== stimulus) { setStimulus(sid); setSelected(null); }
-    setT(tt);
-  }, [stimulus]);
-
-  // Citation chips from the agent: jump to the cited node where the UI can show it.
-  const onCite = useCallback((label: string, id: string) => {
-    if (label === "Segment") pickSegment(id);
-    else if (label === "Insight") {
-      const sid = id.split(":")[0];
-      const start = Number(id.split(":").at(-1));
-      if (sid !== stimulus) setStimulus(sid);
-      setSelected(id);
-      if (!Number.isNaN(start)) setT(start);
-    } else if (label === "Stimulus") { setStimulus(id); setSelected(null); setT(0); }
-    else if (label === "Lens") setLens(id);
-    else if (label === "Network") setMode("networks");
-  }, [pickSegment, stimulus]);
-
-  const lensRow = lenses.find((l) => l.lens === lens);
-  const current = seconds.find((s) => s.t === t);
-  const placeholder = meta?.source === "synthetic-placeholder";
-  const revision = meta?.revisions.find((r) => r.revision)?.revision ?? "rev_ledgerly_v2";
-  const calibrated = lensRow?.weights.some((w) => Math.abs(w.w - w.base_w) > 1e-6);
+  const nameOf = (id: string) => brains.find((b) => b.id === id)?.name ?? id;
+  const running = pending.length > 0;
 
   return (
     <main className="wrap">
-      <header className="top">
-        <h1>Pitch timeline</h1>
-        <span className="sub" style={{ margin: 0 }}>predicted attention and processing signals, per second, from a Relate graph</span>
-      </header>
+      <header className="top"><h1>Brain Panel</h1></header>
       <p className="sub">
-        Meta&apos;s TRIBE v2 predicts how an <em>average</em> brain would respond to each second of a pitch. These are model
-        predictions, not measurements, opinions or buying intent. Lenses are weightings over brain networks, not people.
+        Put a problem or an idea in front of every brain you built. Each one answers <b>in its own voice</b>, says how it
+        would solve it, and shows the beliefs from its graph that it relied on. Brains are models of <i>the answers and words
+        their trainer gave</i>, shown with their measured accuracy. They are not real people or a market.
       </p>
+      {error && <p className="banner err" onClick={() => setError(null)}>{error} <span className="muted small">(click to dismiss)</span></p>}
 
-      {error && <p className="banner err">{error}</p>}
-      {placeholder && <p className="banner">⚠ {meta?.warning}</p>}
-
-      <section className="pitches" aria-label="Pitches">
-        {overview.map((o) => (
-          <button key={o.stimulus} className="pitch" aria-pressed={o.stimulus === stimulus}
-            onClick={() => { setStimulus(o.stimulus); setSelected(null); setT(0); }}>
-            <div className="p">{o.project}{o.source !== "tribe-v2" ? " · placeholder data" : ""}</div>
-            <div className="t">{o.stimulus}</div>
-            <div className="stats">
-              <span><b>{o.seconds}s</b> long</span>
-              <span>Engagement <b>{o.mean_engagement > 0 ? "+" : ""}{o.mean_engagement.toFixed(2)}</b></span>
-              <span><b>{o.insights}</b> insights</span>
-            </div>
-          </button>
-        ))}
-      </section>
-
-      <div className="toolbar">
-        <div className="seg" role="group" aria-label="Lens">
-          {lenses.map((l) => (
-            <button key={l.lens} aria-pressed={l.lens === lens} onClick={() => setLens(l.lens)} title={l.description}>{l.name}</button>
-          ))}
-        </div>
-        <div className="seg" role="group" aria-label="Timeline mode">
-          <button aria-pressed={mode === "lens"} onClick={() => setMode("lens")}>Lens score</button>
-          <button aria-pressed={mode === "networks"} onClick={() => setMode("networks")}>7 networks</button>
-        </div>
-        {lensRow && (
-          <span className="hint">
-            {calibrated && <b title="weights changed by your feedback">calibrated · </b>}
-            {lensRow.name} = {lensRow.weights.map((w) => `${w.w > 0 ? "+" : "−"}${Math.abs(w.w).toFixed(2)}·${NETWORK_LABEL[w.network]}`).join(" ")}
-          </span>
-        )}
-      </div>
-
-      <div className="grid">
+      <div className="grid brains">
         <section className="card">
-          <h2>{meta?.title ?? stimulus} <span className="r">drag to scrub · click a band</span></h2>
-          <Timeline seconds={seconds} insights={insights} mode={mode} lensName={lensRow?.name ?? lens}
-            t={t} onT={setT} selectedInsight={selected} onInsight={pickInsight} />
-        </section>
-
-        <section className="card">
-          <h2>Predicted regional response <span className="r">t={t}s</span></h2>
-          <BrainMap regionsZ={current?.regions_z} regionNames={meta?.region_names ?? []} t={t} />
-        </section>
-
-        <section className="card">
-          <h2>Graph explorer <span className="r">Relate · <code>graph_neighborhood</code></span></h2>
-          <GraphView triples={triples} onSegment={pickSegment} onInsight={pickInsight} />
-        </section>
-        <section className="card">
-          <h2>Insights <span className="r">select one to give feedback</span></h2>
-          <div className="insights">
-            {insights.length === 0 && <p className="empty">No insights for this pitch.</p>}
-            {insights.map((i) => (
-              <InsightCard key={i.insight} ins={i} selected={selected === i.insight} lensName={lensRow?.name ?? lens} busy={busy}
-                onSelect={() => pickInsight(i.insight)}
-                onFeedback={(verdict, comment) => giveFeedback(i.insight, verdict, comment)}
-                onUndo={undoFeedback} />
+          <h2>Ask the panel</h2>
+          <div className="seg" role="group" aria-label="Kind">
+            <button aria-pressed={kind === "problem"} onClick={() => setKind("problem")}>Problem / question</button>
+            <button aria-pressed={kind === "idea"} onClick={() => setKind("idea")}>Idea / pitch</button>
+          </div>
+          <div className="chips" style={{ margin: "8px 0" }}>
+            <span className="muted small">Examples:</span>
+            {examples.examples.map((x) => (
+              <button key={x.title} className="chip-btn"
+                onClick={() => { setTitle(x.title.replace(/^Problem: /, "")); setText(x.text); setKind(x.kind as "problem" | "idea"); }}>
+                {x.title}
+              </button>
             ))}
           </div>
+          <div className="form">
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Short title" maxLength={120} />
+            <textarea value={text} onChange={(e) => setText(e.target.value)} rows={7} maxLength={6000}
+              placeholder={kind === "problem" ? "Describe the problem or ask a question…" : "Paste your idea or pitch…"} />
+          </div>
+          <h4>Brains on the panel</h4>
+          <div className="picklist">
+            {brains.map((b) => (
+              <label key={b.id} className="pick">
+                <input type="checkbox" checked={picked.has(b.id)}
+                  onChange={(e) => setPicked((p) => { const n = new Set(p); if (e.target.checked) n.add(b.id); else n.delete(b.id); return n; })} />
+                <span><b>{b.name}</b><span className="muted small"> · {accuracyText(b)}</span></span>
+              </label>
+            ))}
+            {brains.length === 0 && <p className="empty">No brains yet. Build one in the <a href="/brains">Brain Library</a>.</p>}
+          </div>
+          <button className="primary" disabled={!title.trim() || text.trim().length < 15 || !!busy || running} onClick={ask}>
+            Ask {picked.size} brain{picked.size === 1 ? "" : "s"}
+          </button>
+
+          {asks.length > 0 && (
+            <>
+              <h4>Earlier questions</h4>
+              <div className="blist">
+                {asks.map((a) => (
+                  <button key={a.id} className="pitch" aria-pressed={a.id === sel} onClick={() => open(a)}>
+                    <div className="p">{a.kind}</div>
+                    <div className="t">{a.title}</div>
+                    <div className="stats"><span><b>{a.responses}</b> responses</span><span><b>{a.claims}</b> points</span></div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </section>
 
+        <div className="col">
+          {busy && <p className="banner">{busy}</p>}
+          {!sel && !busy && (
+            <section className="card">
+              <p className="empty">Ask a question on the left, or open an earlier one. Each brain answers in turn (free Groq plan), then the panel is synthesised.</p>
+            </section>
+          )}
+
+          {sel && selAsk && (
+            <section className="card">
+              <h2>{selAsk.title} <span className="r">{selAsk.kind}</span></h2>
+              {selAsk.text && <p className="small muted asktext">{selAsk.text}</p>}
+            </section>
+          )}
+
+          {sel && (
+            <div className="responses">
+              {responses.map((r) => (
+                <section key={r.brain} className={`card resp r-${r.reaction}`}>
+                  <div className="rhead">
+                    <span className="rname">{r.name}</span>
+                    <span className={`reaction r-${r.reaction}`}>{REACT_ICON[r.reaction] ?? ""} {r.reaction}</span>
+                  </div>
+                  <div className="muted small">{accuracyText(r.stats)}</div>
+                  <blockquote>“{r.says}”</blockquote>
+                  {r.concerns?.length > 0 && (<><b className="small">Concerns</b><ul className="small">{r.concerns.map((c) => <li key={c}>{c}</li>)}</ul></>)}
+                  {r.would_do && <p className="small"><b>Would do:</b> {r.would_do}</p>}
+                  {r.cited?.length > 0 && (
+                    <details className="small">
+                      <summary>Beliefs it relied on ({r.cited.length})</summary>
+                      <ul>
+                        {r.cited.map((c) => (
+                          <li key={c.claim}>{STANCE[String(c.stance)] ?? ""} “{c.text}”{c.quote ? <span className="muted">, in their words: “{c.quote}”</span> : null}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                  <div className="muted small">by {r.by}</div>
+                </section>
+              ))}
+              {pending.map((b) => (
+                <section key={b} className="card resp pending"><div className="rname">{nameOf(b)}</div><p className="muted">thinking with its graph…</p></section>
+              ))}
+              {Object.entries(failed).map(([b, msg]) => (
+                <section key={b} className="card resp"><div className="rname">{nameOf(b)}</div><p className="err small">{msg}</p></section>
+              ))}
+            </div>
+          )}
+
+          {syn && (
+            <section className="card">
+              <h2>Panel synthesis <span className="r">by {syn.by}</span></h2>
+              {syn.consensus.length > 0 && (<><h4>Where they agree</h4><ul>{syn.consensus.map((c) => <li key={c}>{c}</li>)}</ul></>)}
+              {syn.conflicts.length > 0 && (
+                <>
+                  <h4>Where they clash</h4>
+                  {syn.conflicts.map((c) => (
+                    <div key={c.topic} className="conflict">
+                      <b>{c.topic}</b>
+                      <ul className="small">{c.sides.map((s) => <li key={s.brain}><b>{nameOf(s.brain)}</b>: {s.position}</li>)}</ul>
+                    </div>
+                  ))}
+                </>
+              )}
+              {syn.joint_solution && (<><h4>Joint solution</h4><p>{syn.joint_solution}</p></>)}
+              {syn.next_questions.length > 0 && (<><h4>Ask next</h4><ul className="small">{syn.next_questions.map((x) => <li key={x}>{x}</li>)}</ul></>)}
+            </section>
+          )}
+
+          {sel && !running && (
+            <section className="card">
+              <h2>Go deeper</h2>
+              <div className="chips">
+                <button className="chip-btn" disabled={!!busy} onClick={() => sel && runPanel(sel, [...picked])}>Ask again</button>
+                <button className="chip-btn" disabled={!!busy} onClick={showMatrix}>Point-by-point reactions</button>
+                <button className="chip-btn" disabled={!!busy} onClick={showKnowledge}>World knowledge</button>
+              </div>
+            </section>
+          )}
+
+          {matrix && (
+            <section className="card">
+              <h2>Point by point <span className="r">does each point land with each brain?</span></h2>
+              <PointMatrix ev={matrix} busy={!!busy} onTeach={teach} />
+            </section>
+          )}
+
+          {know && (
+            <section className="card">
+              <h2>World knowledge <span className="r">Wikidata · Wikipedia</span></h2>
+              <KnowledgePanel k={know} busy={!!busy} onLink={linkNow} claimText={(id) => matrix?.claims.find((c) => c.claim === id)?.text ?? id} />
+            </section>
+          )}
+
+          {triples.length > 0 && (
+            <section className="card">
+              <h2>Panel as a graph <span className="r">(:Brain)-[:BELIEVES]-&gt;(:Claim)-[:MENTIONS]-&gt;(:Concept)</span></h2>
+              <GraphView triples={triples} onSegment={() => null} onInsight={() => null} />
+            </section>
+          )}
+        </div>
       </div>
-
-      <div className="grid" style={{ marginTop: 14 }}>
-        <section className="card">
-          <h2>Before / after <span className="r">Revision <code>{revision}</code> · {lensRow?.name ?? lens} lens</span></h2>
-          <Compare revision={revision} lens={lens} lensName={lensRow?.name ?? lens} version={version}
-            onPick={(sid, tt) => { setStimulus(sid); setT(tt); }} />
-        </section>
-        <section className="card">
-          <h2>Calibration <span className="r">learns from your feedback</span></h2>
-          <LearningLog lens={lensRow} log={log} last={lastFb} busy={busy} onUndo={undoFeedback} onReset={resetLens}
-            onPick={(id) => onCite("Insight", id)} />
-        </section>
-      </div>
-
-      <section className="card" style={{ marginTop: 14 }}>
-        <h2>Ask the graph <span className="r">graph-grounded answers · citations verified</span></h2>
-        <AgentChat context={{ stimulus, insight: selected, t, lens }} onCite={onCite} />
-      </section>
-
-      <footer className="note">
-        Every panel is a named Cypher query from <code>graph/queries.cypher</code>, run on <code>graph/brainprint.rl</code> (a
-        single-file Relate store) through <code>/api/query</code>.
-      </footer>
     </main>
   );
 }

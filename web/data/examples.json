@@ -1,0 +1,30 @@
+{
+  "_about": "Example inputs for the Brain Panel. Pitches are fictional, written for BrainPrint.",
+  "examples": [
+    {
+      "title": "Ledgerly v1 (jargon-heavy pitch)",
+      "kind": "idea",
+      "text": "Hi, we are Ledgerly.\n\nLedgerly is an AI-native, end-to-end financial operations orchestration layer that leverages multi-agent reasoning, real-time ledger reconciliation, and a composable, API-first architecture to unlock synergistic value across heterogeneous accounting workflows for the long tail of independent knowledge workers, while ensuring SOC two compliant, zero-trust data governance and seamless interoperability with legacy ERP ecosystems, payment rails, and emerging open banking standards.\n\nOur proprietary embeddings-driven categorisation engine, combined with predictive cash-flow modelling and adaptive tax-liability forecasting, delivers a paradigm shift in how freelancers conceptualise their fiscal posture.\n\nIn short: freelancers spend about five hours a month on receipts. Ledgerly does it for them.\n\nWe are raising one million dollars."
+    },
+    {
+      "title": "Ledgerly v2 (revised pitch)",
+      "kind": "idea",
+      "text": "Hi, we are Ledgerly.\n\nMaya is a freelance designer. Every month she spends about five hours digging through emails for receipts, guessing which ones are tax deductible, and worrying about her quarterly tax bill.\n\nLedgerly does that for her. Forward a receipt, or connect your bank, and Ledgerly sorts every expense into the right tax category automatically.\n\nEach month Maya gets one short message: here is what you spent, here is what you can deduct, and here is how much to set aside for taxes.\n\nOur first two hundred freelancers saved an average of four hours a month.\n\nWe are raising one million dollars to reach ten thousand freelancers next year."
+    },
+    {
+      "title": "Crumb (bakery leftovers)",
+      "kind": "idea",
+      "text": "Every week, a small bakery in our town throws away about forty loaves of bread. Not because the bread is bad, but because nobody knew it was there.\n\nWe built Crumb. At six p.m., the bakery snaps one photo of what is left. Crumb turns that photo into a listing, and people within one kilometre get a ping: four loaves, half price, pick up before seven.\n\nLast month we ran this with twelve bakeries. They sold seventy percent of their leftovers and earned an extra three hundred euros each.\n\nBakers pay nothing up front. We take ten percent of each sale.\n\nWe are raising two hundred thousand euros to reach five hundred shops by next summer. If you have ever watched good food go in the bin, you already understand Crumb."
+    },
+    {
+      "title": "Problem: freelancers hate bookkeeping",
+      "kind": "problem",
+      "text": "Freelancers lose hours every month on receipts, invoices and tax paperwork, and many put it off until it becomes stressful. How should we solve this, and what would make you actually use a solution?"
+    },
+    {
+      "title": "Problem: local shops throw away food",
+      "kind": "problem",
+      "text": "Small bakeries and cafes throw away unsold food every evening. What would make this problem worth solving, and what solution would you trust and use?"
+    }
+  ]
+}

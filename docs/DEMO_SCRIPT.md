@@ -1,26 +1,23 @@
 # BrainPrint: 90-second demo video script
 
 **Setup before recording**
-- `cd web && npm run dev` with a Groq key in `web/.env.local`. Make sure the free daily quota isn't used up: do a test run *before* the day of recording, or set `GROQ_MODEL=openai/gpt-oss-20b`.
-- **Browser:** 1440 px wide, dark mode, zoom 100%, starting on the **Pitch timeline** page with `pitch_jargon` selected.
-- **If you ran the Colab notebook** (real TRIBE data), the yellow "synthetic placeholder" banner disappears. Re-ingest first: `python graph/ingest.py` with the server stopped. **If you did not,** keep the banner visible and say the placeholder line below. Do not hide it.
-- **Pre-warm** the slow steps so the video doesn't wait on them: open the Idea Lab once and press "Get advice" once.
+- `cd web && npm run dev` with a Groq key in `web/.env.local`. Groq's free plan has a daily token quota, so do a test run a day before. The app falls back to `gpt-oss-20b` automatically, but test anyway.
+- **Browser:** 1440 px wide, dark mode. Start on the **Brain Panel** page.
+- **Pre-warm:** open the "Freelancers hate bookkeeping" question once so its answers and synthesis load from the graph instantly.
 
 | time | screen | narration |
 |---|---|---|
-| **0:00–0:08** | Pitch timeline, Ledgerly v1. The Engagement line dips through the middle. | "Before you pitch, test it on two kinds of brain. Here's a startup pitch, second by second." |
-| **0:08–0:22** | Drag the cursor into the 21–35 s band. The brain map lights up, and the insight card reads *Attention dip*. | "Meta's TRIBE v2 predicts how an *average* brain's networks respond. In the jargon block, the predicted attention signal drops and default-mode rises. These are predictions, not opinions." *(If placeholder: "In this demo the curves are placeholder data; the real model runs on a GPU in our Colab notebook.")* |
-| **0:22–0:32** | Graph explorer: hover a dashed `SIMILAR_TO` edge, click it, and the view jumps to Ledgerly v2. | "Every panel is a Cypher query on one Relate file. Vector search over brain-response patterns finds similar moments in other pitches, and a revision that fixed them." |
-| **0:32–0:42** | Ask the graph, then "Suggest a concrete rewrite". The answer appears with citation chips and "6/6 citations verified". | "The agent answers from graph facts only, and every node it cites is checked against what the queries actually returned." |
-| **0:42–0:50** | Select the insight and press "✓ Real issue". The calibrated badge and the dashed "before calibration" line appear. | "My feedback is stored in the graph and recalibrates the lens. TRIBE itself is never retrained." |
-| **0:50–1:05** | Brain Library, Cautious investor: answer one question. The reveal reads "The brain had predicted … ✓", and the KPI tiles show "CV 64–73% vs 59% baseline". | "Second kind of brain: mindsets I train by answering. Each brain commits to a prediction *before* I answer, so its accuracy is honest, and we show it against a baseline." |
-| **1:05–1:20** | Idea Lab, Ledgerly v1 matrix: jargon points ✗ for both brains, "5 hours a month" ✓. Click a cell to show the starred answers behind it. Scroll to World knowledge (`ai` → *artificial intelligence*, Wikidata Q11660) and a web check verdict. | "Paste an idea. It's split into claims, linked to Wikidata, and every brain predicts which points land and which put it off. Each prediction shows its evidence from the graph." |
-| **1:20–1:30** | Zoom out on the Idea knowledge graph, then end on the repo README. | "TRIBE predictions, trained brains, ideas, Wikidata and web sources: one Relate file, one connected context. BrainPrint." |
+| **0:00–0:08** | Brain Panel home: three brain cards with their accuracy labels. | "What would different kinds of people say about your idea? BrainPrint lets you build their brains, then ask them all at once." |
+| **0:08–0:25** | Brain Library → Skeptical CFO → **Talk**. Type: "Honestly, if it doesn't integrate with Xero I'm not interested." The reply lists the learned beliefs, with the quote under each, and asks a follow-up question. Scroll to "How Skeptical CFO talks". | "I build a brain by just talking as that person. Every belief it learns is backed by the exact words I used, and it learns how they talk." |
+| **0:25–0:35** | **Quiz** tab: the brain has already committed to a prediction. Answer it, and the reveal reads "✓ correct", with the earlier answers it relied on. Point at "CV 64–73% vs 59% baseline". | "Before every question it commits to a prediction, so its accuracy is measured honestly against a baseline." |
+| **0:35–0:58** | Brain Panel → "Freelancers hate bookkeeping": the three answer cards (🤩 freelancer, 🤨 investor, 🤨 CFO). Expand "Beliefs it relied on" on the CFO card. | "Now I ask the panel a problem. Each brain answers in its own voice and says how it would solve it, grounded in its own beliefs from the graph." |
+| **0:58–1:12** | Panel synthesis: "Where they clash: pricing model", with three positions, then the **joint solution**. | "Then they're combined like a real team: where they agree, where they clash, and a solution that covers everyone's concerns." |
+| **1:12–1:22** | **Panel as a graph**: brains → beliefs → concepts. Hover a shared claim ("I trust AI to handle my money…"), which the CFO and the investor disagree with and the freelancer agrees with. | "Every brain is a subgraph in one Relate file. Brains connect through shared beliefs and concepts, and that's what the panel queries." |
+| **1:22–1:30** | The README "Why Relate" section. | "Persona brains, one knowledge graph, context connected. BrainPrint." |
 
-**Optional 10-second cut (if the video can be longer):** with the web app stopped, show Claude Code with `docs/mcp.example.json` installed, asking "which pitch moments are similar to Ledgerly's jargon block?". Relate's MCP `read_cypher` answers from the same file.
+**Optional 10-second cut:** with the web app stopped, show Claude Code using `docs/mcp.example.json` and asking "which brains distrust AI with money, and in whose words?". Relate's MCP `read_cypher` answers from the same file.
 
 **Honesty checklist for the narration**
-- Say "predicted attention signal", never "viewers were bored".
-- Brains are "models of answers I gave", never "customers" or "the market".
-- Show the accuracy-vs-baseline number on screen at least once.
-- If the TRIBE data is still placeholder, say so (see 0:08).
+- Brains are "models of the answers and words I gave them", never "real customers" or "the market".
+- Show at least one accuracy-vs-baseline number on screen.
+- Mention that the three example brains were built from scripted messages.
