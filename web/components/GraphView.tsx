@@ -12,9 +12,9 @@ type L = SimulationLinkDatum<N> & { rel: string; w: number | null };
 const COLOR: Record<string, string> = {
   Project: "#5b5bd6", Stimulus: "#3b7dd8", Segment: "#9aa0a6", Insight: "#d98a00",
   Lens: "#149c8c", Network: "#9b51e0", Revision: "#3a9d4a", Feedback: "#d64545",
-  Brain: "#5b5bd6", Claim: "#d98a00", Concept: "#149c8c", Idea: "#3b7dd8", WikiEntity: "#7c8592", Source: "#d64545",
+  Brain: "#5b5bd6", Claim: "#d98a00", Concept: "#149c8c", Idea: "#3b7dd8", WikiEntity: "#7c8592", Source: "#d64545", Moment: "#e5604f",
 };
-const R: Record<string, number> = { Project: 11, Stimulus: 10, Insight: 9, Lens: 8, Network: 7, Revision: 9, Feedback: 7, Segment: 4, Brain: 12, Claim: 5, Concept: 7, Idea: 10, WikiEntity: 6, Source: 5 };
+const R: Record<string, number> = { Project: 11, Stimulus: 10, Insight: 9, Lens: 8, Network: 7, Revision: 9, Feedback: 7, Segment: 4, Brain: 12, Claim: 5, Concept: 7, Idea: 10, WikiEntity: 6, Source: 5, Moment: 5 };
 const W = 760, H = 520;
 
 type Props = { triples: Triple[]; onSegment: (id: string) => void; onInsight: (id: string) => void };
@@ -71,7 +71,7 @@ export default function GraphView({ triples, onSegment, onInsight }: Props) {
             onMouseEnter={() => setInfo(`(:${n.label} {id: "${n.id}"})  ${n.name}`)}
             onClick={() => (n.label === "Segment" ? onSegment(n.id) : n.label === "Insight" ? onInsight(n.id) : null)}>
             <circle r={R[n.label] ?? 5} fill={COLOR[n.label] ?? "#888"} stroke="var(--panel)" strokeWidth="1.5" />
-            {n.label !== "Segment" && n.label !== "Claim" && <text x={(R[n.label] ?? 5) + 3} y={3}>{n.name}</text>}
+            {n.label !== "Segment" && n.label !== "Claim" && n.label !== "Moment" && <text x={(R[n.label] ?? 5) + 3} y={3}>{n.name}</text>}
           </g>
         ))}
       </svg>
@@ -79,7 +79,7 @@ export default function GraphView({ triples, onSegment, onInsight }: Props) {
         {legend.map((l) => <span key={l} style={{ ["--c" as string]: COLOR[l] }}>{l}</span>)}
         <span style={{ ["--c" as string]: "var(--accent)" }}>SIMILAR_TO (vector index)</span>
       </div>
-      <div className="info"><code>{info || "Hover nodes and edges. Click a segment or insight to jump to it."}</code></div>
+      <div className="info"><code>{info || "Hover nodes and edges to see what they are."}</code></div>
     </div>
   );
 }

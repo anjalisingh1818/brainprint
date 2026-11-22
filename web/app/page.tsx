@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import GraphView from "@/components/GraphView";
 import KnowledgePanel, { type Knowledge } from "@/components/KnowledgePanel";
 import PointMatrix, { type Evaluation } from "@/components/PointMatrix";
+import BrainResponse, { type Brainwave } from "@/components/BrainResponse";
 import type { Triple } from "@/lib/types";
 import examples from "@/data/examples.json";
 
@@ -53,6 +54,7 @@ export default function PanelPage() {
   const [triples, setTriples] = useState<Triple[]>([]);
   const [matrix, setMatrix] = useState<Evaluation | null>(null);
   const [know, setKnow] = useState<Knowledge | null>(null);
+  const [bw, setBw] = useState<(Brainwave & { triples: Triple[] }) | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,6 +71,7 @@ export default function PanelPage() {
       `/api/panel?idea=${encodeURIComponent(id)}`);
     if (s.idea) setSelAsk(s.idea);
     setResponses(s.responses); setSyn(s.synthesis); setTriples(s.triples);
+    setBw(await api<Brainwave & { triples: Triple[] }>(`/api/brainwave?idea=${encodeURIComponent(id)}`).catch(() => null));
   }, []);
 
   const open = async (a: Ask) => {
@@ -127,6 +130,15 @@ export default function PanelPage() {
     setBusy("Linking concepts to Wikidata (rate-limited, about a minute)…");
     try { await api("/api/knowledge", { action: "link", idea: sel }); setKnow(await api<Knowledge>(`/api/knowledge?idea=${encodeURIComponent(sel)}`)); }
     catch (e) { setError(String((e as Error).message ?? e)); }
+    finally { setBusy(null); }
+  };
+  const importBrainwave = async () => {
+    setBusy("Importing TRIBE v2 results into the graph…");
+    try {
+      const r = await api<{ imported: unknown[]; skipped: { file: string; reason: string }[] }>("/api/brainwave", { action: "import" });
+      if (r.skipped.length) setError(`Skipped: ${r.skipped.map((x) => x.reason).join("; ")}`);
+      if (sel) await loadState(sel);
+    } catch (e) { setError(String((e as Error).message ?? e)); }
     finally { setBusy(null); }
   };
   const teach = async (brain: string, claim: string, value: 1 | 0 | -1) => {
@@ -288,6 +300,13 @@ export default function PanelPage() {
             </section>
           )}
 
+          {sel && bw && (bw.scan || bw.pending.length > 0) && (
+            <section className="card">
+              <h2>Average brain response <span className="r">TRIBE v2 · predicted, not measured</span></h2>
+              <BrainResponse bw={bw} busy={!!busy} onImport={importBrainwave} />
+            </section>
+          )}
+
           {know && (
             <section className="card">
               <h2>World knowledge <span className="r">Wikidata · Wikipedia</span></h2>
@@ -295,10 +314,10 @@ export default function PanelPage() {
             </section>
           )}
 
-          {triples.length > 0 && (
+          {(triples.length > 0 || (bw?.triples.length ?? 0) > 0) && (
             <section className="card">
               <h2>Panel as a graph <span className="r">(:Brain)-[:BELIEVES]-&gt;(:Claim)-[:MENTIONS]-&gt;(:Concept)</span></h2>
-              <GraphView triples={triples} onSegment={() => null} onInsight={() => null} />
+              <GraphView triples={[...triples, ...(bw?.triples ?? [])]} onSegment={() => null} onInsight={() => null} />
             </section>
           )}
         </div>

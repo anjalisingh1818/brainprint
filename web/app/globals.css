@@ -19,6 +19,9 @@
   --kind-drift: #d64545;
   --kind-overload: #9b51e0;
   --brain-empty: #d9d9d6;
+  --div-hi: #d6453d;
+  --div-lo: #2a78d6;
+  --div-mid: #f0efec;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -33,6 +36,9 @@
     --warn-ink: #f3cf73;
     --band: rgba(143, 143, 255, 0.1);
     --brain-empty: #34343c;
+    --div-hi: #e5604f;
+    --div-lo: #3987e5;
+    --div-mid: #383835;
     color-scheme: dark;
   }
 }
@@ -239,3 +245,27 @@ table.kt a { color: var(--accent); }
 .talk .ask { display: flex; gap: 8px; }
 .talk .ask button { border: 0; background: var(--accent); color: #fff; border-radius: 8px; padding: 0 14px; cursor: pointer; }
 .talk .ask button:disabled { opacity: 0.5; }
+
+/* Brainwave (TRIBE v2) heatmap */
+.bwgrid { display: grid; gap: 2px; margin: 8px 0 4px; align-items: stretch; }
+.bwlab { padding-right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; align-self: center; }
+.bwcell { height: 22px; border-radius: 2px; }
+.bwcell.hov { outline: 2px solid var(--ink); outline-offset: -1px; }
+.bwcell.inm { box-shadow: inset 0 -3px 0 var(--accent); }
+.bwmom { height: 18px; font-size: 11px; text-align: left; color: var(--muted); border-radius: 2px; }
+.bwmom.on { background: color-mix(in oklab, var(--accent) 22%, transparent); color: var(--ink); }
+.bwmom.on.alt { background: color-mix(in oklab, var(--accent) 42%, transparent); }
+.bwmom.sel { background: var(--accent); color: var(--panel); }
+.bwtick { font-size: 10px; white-space: nowrap; overflow: visible; }
+.bwtip { min-height: 2.6em; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
+.bwv { margin-right: 10px; white-space: nowrap; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; }
+.sw.hi { background: var(--div-hi); } .sw.lo { background: var(--div-lo); }
+.bwtable { width: 100%; border-collapse: collapse; }
+.bwtable th { text-align: left; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line); padding: 4px 6px; }
+.bwtable td { vertical-align: top; border-bottom: 1px solid var(--line); padding: 6px; }
+.bwtable tr.sel td { background: var(--band); }
+.bwtable .chips { margin-top: 4px; }
+.chip.yes { color: var(--net-motor); border-color: var(--net-motor); }
+.chip.no { color: var(--net-default_mode); border-color: var(--net-default_mode); }
+.bwflag { margin-top: 4px; font-weight: 600; color: var(--net-default_mode); }

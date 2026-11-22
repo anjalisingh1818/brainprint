@@ -1,4 +1,4 @@
-# legacy/: the TRIBE v2 pitch-timeline module (not used by the app)
+# legacy/: the TRIBE v2 pitch-timeline module (its runner is reused by brainwave/)
 
 BrainPrint started as a "pitch timeline". Meta's **TRIBE v2** predicted how an average brain's networks respond to each second of a pitch, and those predictions were stored in Relate as segments, networks, lenses and insights. The project then refocused on the **Brain Panel** (persona brains built by talking). The timeline was removed from the app, and its pipeline is kept here for reference.
 

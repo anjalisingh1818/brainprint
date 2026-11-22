@@ -107,6 +107,15 @@ Concepts are **entity-linked** to Wikidata:
 
 Our first heuristic linker mapped `ai` to *Anguilla*; in-context disambiguation fixed it. **Bridges** show other statements in the graph that share a Wikidata class with the question. An optional **web check** (Groq `browser_search`) stores only pages the tool actually returned as `(:Source)-[:EVIDENCE]->(:Claim)`, judged in a separate call.
 
+## Average brain response (TRIBE v2)
+The persona brains say what a *kind of person* thinks. Meta's [TRIBE v2](https://github.com/facebookresearch/tribev2) adds a second view: how an **average brain** is predicted to respond, second by second, while hearing the same text. The Panel shows both side by side for every question or pitch, sentence by sentence.
+- **Flow:**
+  1. `node brainwave/export.mjs` writes each panel question to `brainwave/inputs/`.
+  2. [`brainwave/colab_brainwave.ipynb`](brainwave/colab_brainwave.ipynb) runs TRIBE on a Colab T4 GPU. It needs Hugging Face access to `meta-llama/Llama-3.2-3B`.
+  3. Unzip its JSON files into `brainwave/results/` and click **Import TRIBE results** on the Panel.
+- **Graph:** `(:Idea)-[:SCANNED_AS]->(:Scan)-[:HAS_MOMENT]->(:Moment)-[:ABOUT]->(:Claim)<-[:PREDICTS]-(:Brain)`, plus `(:Moment)-[:ACTIVATES {z}]->(:Network)`. One query answers "which sentences raise attention/effort for an average listener, and which personas does the same point put off?"
+- **Honest scope:** TRIBE predicts fMRI-like responses for an average subject. The 7 networks are a coarse, hand-made grouping of atlas regions ([legacy/tribe/networks.py](legacy/tribe/networks.py)). Values are z-scored within each text, so they mean "above or below this text's own average", not good or bad. Synthetic or placeholder files are refused on import.
+
 ## Free-tier budget
 Groq's free plan allows about **200,000 tokens per day per model**. Approximate costs:
 - one Talk message ≈ 2k tokens;
@@ -131,7 +140,9 @@ The host can then query every brain read-only, for example "which brains distrus
 | `web/` | Next.js app: [`lib/talk.ts`](web/lib/talk.ts), [`lib/panel.ts`](web/lib/panel.ts), [`lib/brains.ts`](web/lib/brains.ts) (prediction, Quiz, cross-validation), [`lib/ideas.ts`](web/lib/ideas.ts), [`lib/knowledge.ts`](web/lib/knowledge.ts), [`lib/llm.ts`](web/lib/llm.ts) |
 | `web/data/` | Probe statements, the example brains' scripted answers, and example questions |
 | `docs/` | [`RELATE_NOTES.md`](docs/RELATE_NOTES.md) (verified Relate API and findings), [`DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md), [`mcp.example.json`](docs/mcp.example.json) |
-| `legacy/` | The earlier TRIBE v2 "pitch timeline" module (predicted brain-network activity per second), no longer part of the app. See [legacy/README.md](legacy/README.md). |
+| `brainwave/` | TRIBE v2 for panel questions: export script, Colab notebook, `inputs/`, `results/` ([lib/brainwave.ts](web/lib/brainwave.ts) imports them) |
+| `video/` | Scripts that recorded, narrated and edited the demo video ([docs/VIDEO_PLAN.md](docs/VIDEO_PLAN.md)) |
+| `legacy/` | The earlier TRIBE v2 "pitch timeline" module. Its runner and network grouping are reused by `brainwave/`. See [legacy/README.md](legacy/README.md). |
 
 ## Limitations
 - **Brains are small models of what their trainer said.** They are trained on dozens of statements, not thousands, so accuracy is noisy, and a brain is only as good as its training. Every panel answer shows its brain's measured accuracy. Treat brains that don't beat their baseline as weak.

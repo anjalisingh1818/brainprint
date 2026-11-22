@@ -1,0 +1,10 @@
+{
+  "name": "brainprint-video",
+  "private": true,
+  "type": "module",
+  "description": "Records and edits the BrainPrint demo video (Playwright + ffmpeg + local TTS).",
+  "dependencies": {
+    "ffmpeg-static": "5.2.0",
+    "playwright": "1.49.1"
+  }
+}
